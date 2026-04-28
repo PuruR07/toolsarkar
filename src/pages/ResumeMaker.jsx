@@ -25,9 +25,10 @@ export default function ResumeMaker({ language }) {
       dates: "Dates (e.g., 2020 - Present)",
       description: "Description",
       education: "Education",
-      institution: "Institution",
+      institution: "School/College",
       degree: "Degree",
-      skills: "Skills (comma separated)",
+      skills: "Strengths",
+      score: "Marks / CGPA / %",
       downloadPdf: "Download PDF",
       chooseTemplate: "Choose a Template",
       backToTemplates: "Back to Templates",
@@ -49,9 +50,10 @@ export default function ResumeMaker({ language }) {
       dates: "तारीखें",
       description: "विवरण",
       education: "शिक्षा",
-      institution: "संसथान",
+      institution: "स्कूल/कॉलेज",
       degree: "डिग्री",
-      skills: "कौशल (अल्पविराम से अलग)",
+      skills: "ताकत (अल्पविराम से अलग)",
+      score: "अंक / सीजीपीए / %",
       downloadPdf: "पीडीएफ डाउनलोड करें",
       chooseTemplate: "टेम्पलेट चुनें",
       backToTemplates: "टेम्पलेट्स पर वापस जाएं",
@@ -91,12 +93,23 @@ export default function ResumeMaker({ language }) {
   ]);
 
   const [education, setEducation] = useState([
-    { id: 1, institution: 'State University', degree: 'B.S. in Computer Science', dates: '2015 - 2019' }
+    { id: 1, institution: 'State University', board: '', degree: 'B.S. in Computer Science', dates: '2015 - 2019', score: '' }
   ]);
 
-  const [skills, setSkills] = useState('JavaScript, React, Tailwind CSS, HTML, CSS, Node.js');
+  const [skills, setSkills] = useState([
+    { id: 1, text: 'Hard Working' },
+    { id: 2, text: 'Honest' },
+    { id: 3, text: 'Confident' },
+    { id: 4, text: 'Loyal' },
+    { id: 5, text: 'Communication Skills' }
+  ]);
+  const [computerKnowledge, setComputerKnowledge] = useState([
+    { id: 1, text: 'Basic Computer Knowledge' },
+    { id: 2, text: 'MS Office' },
+    { id: 3, text: 'MS Excel' }
+  ]);
 
-  const [pagesData, setPagesData] = useState([{ isFirst: true, header: true, summary: true, skills: true, experience, education }]);
+  const [pagesData, setPagesData] = useState([{ isFirst: true, header: true, summary: true, experience: experience, education: education, skills: true, strengths: true, computerKnowledge: true, profile: true, footer: true }]);
   const hiddenPreviewRef = useRef(null);
 
   // Resize logic for scaling container proportionally
@@ -138,7 +151,7 @@ export default function ResumeMaker({ language }) {
       if (sections.length === 0) return;
 
       const pages = [];
-      let currentPage = { isFirst: true, header: false, summary: false, skills: false, profile: false, experience: [], education: [] };
+      let currentPage = { isFirst: true, header: false, summary: false, skills: false, strengths: false, computerKnowledge: false, profile: false, footer: false, experience: [], education: [] };
       let currentHeight = 0;
       const MAX_HEIGHT = 980; // Safe inner height for 1123px A4 minus container padding
 
@@ -153,7 +166,7 @@ export default function ResumeMaker({ language }) {
 
         if (currentHeight + nodeHeight > MAX_HEIGHT && currentHeight > 0) {
           pages.push({ ...currentPage });
-          currentPage = { isFirst: false, header: false, summary: false, skills: false, profile: false, experience: [], education: [] };
+          currentPage = { isFirst: false, header: false, summary: false, skills: false, strengths: false, computerKnowledge: false, profile: false, footer: false, experience: [], education: [] };
           currentHeight = 0;
         }
 
@@ -162,7 +175,10 @@ export default function ResumeMaker({ language }) {
         if (type === 'header') currentPage.header = true;
         if (type === 'summary') currentPage.summary = true;
         if (type === 'skills') currentPage.skills = true;
+        if (type === 'strengths') currentPage.strengths = true;
+        if (type === 'computerKnowledge') currentPage.computerKnowledge = true;
         if (type === 'profile') currentPage.profile = true;
+        if (type === 'footer') currentPage.footer = true;
         if (type === 'experience-item') {
           const item = experience.find(e => e.id.toString() === id);
           if (item) currentPage.experience.push(item);
@@ -174,7 +190,7 @@ export default function ResumeMaker({ language }) {
       });
 
       // push any remaining data
-      if (currentPage.header || currentPage.summary || currentPage.skills || currentPage.profile || currentPage.experience.length > 0 || currentPage.education.length > 0 || pages.length === 0) {
+      if (currentPage.header || currentPage.summary || currentPage.skills || currentPage.strengths || currentPage.computerKnowledge || currentPage.profile || currentPage.footer || currentPage.experience.length > 0 || currentPage.education.length > 0 || pages.length === 0) {
         pages.push(currentPage);
       }
 
@@ -182,13 +198,72 @@ export default function ResumeMaker({ language }) {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [personalDetails, summary, experience, education, skills, selectedTemplate, view]);
+  }, [personalDetails, summary, experience, education, skills, computerKnowledge, selectedTemplate, view]);
 
 
   // Handlers
   const handleTemplateSelect = (id) => {
     setSelectedTemplate(id);
     setView('editor');
+
+    if (id.startsWith('basic')) {
+      let newEdu = [];
+      if (id === 'basic-10th') {
+        newEdu = [{ id: 1, degree: '10th / High School', institution: '', board: '', dates: '', score: '' }];
+      } else if (id === 'basic-12th') {
+        newEdu = [
+          { id: 1, degree: '10th / High School', institution: '', board: '', dates: '', score: '' },
+          { id: 2, degree: '12th / Intermediate', institution: '', board: '', dates: '', score: '' }
+        ];
+      } else if (id === 'basic-diploma') {
+        newEdu = [
+          { id: 1, degree: '10th / High School', institution: '', board: '', dates: '', score: '' },
+          { id: 2, degree: 'Diploma', institution: '', board: '', dates: '', score: '' }
+        ];
+      } else if (id === 'basic-graduation-diploma') {
+        newEdu = [
+          { id: 1, degree: '10th / High School', institution: '', board: '', dates: '', score: '' },
+          { id: 2, degree: 'Diploma', institution: '', board: '', dates: '', score: '' },
+          { id: 3, degree: 'Graduation / Degree', institution: '', board: '', dates: '', score: '' }
+        ];
+      } else if (id === 'basic-graduation') {
+        newEdu = [
+          { id: 1, degree: '10th / High School', institution: '', board: '', dates: '', score: '' },
+          { id: 2, degree: '12th / Intermediate', institution: '', board: '', dates: '', score: '' },
+          { id: 3, degree: 'Graduation / Degree', institution: '', board: '', dates: '', score: '' }
+        ];
+      } else if (id === 'basic-masters') {
+        newEdu = [
+          { id: 1, degree: '10th / High School', institution: '', board: '', dates: '', score: '' },
+          { id: 2, degree: '12th / Intermediate', institution: '', board: '', dates: '', score: '' },
+          { id: 3, degree: 'Graduation / Degree', institution: '', board: '', dates: '', score: '' },
+          { id: 4, degree: 'Post Graduation / Masters', institution: '', board: '', dates: '', score: '' }
+        ];
+      }
+      setEducation(newEdu);
+
+      setSummary('To seek an entry-level position to utilize my skills and abilities in the industry that offers professional growth while being resourceful, innovative, and flexible.');
+      setSkills([
+        { id: 101, text: 'Kind' },
+        { id: 102, text: 'Hard Working' },
+        { id: 103, text: 'Loyal' },
+        { id: 104, text: 'Positive Attitude' },
+        { id: 105, text: 'Quick Learner' }
+      ]);
+
+      setPersonalDetails(prev => ({
+        ...prev,
+        customFields: [
+          { id: 101, label: "Father's Name", value: 'Mr. John Doe' },
+          { id: 102, label: "Date of Birth", value: '01/01/2000' },
+          { id: 103, label: "Gender", value: 'Male' },
+          { id: 104, label: "Nationality", value: 'Indian' },
+          { id: 105, label: "Religion / Caste", value: 'Hindu / General' },
+          { id: 106, label: "Languages Known", value: 'English, Hindi' },
+          { id: 107, label: "Marital Status", value: 'Unmarried' }
+        ]
+      }));
+    }
   };
 
   const handlePersonalChange = (e) => {
@@ -265,12 +340,20 @@ export default function ResumeMaker({ language }) {
   };
 
   const addEducation = () => {
-    setEducation([...education, { id: Date.now(), institution: '', degree: '', dates: '' }]);
+    setEducation([...education, { id: Date.now(), institution: '', board: '', degree: '', dates: '', score: '' }]);
   };
 
   const removeEducation = (id) => {
     setEducation(education.filter(edu => edu.id !== id));
   };
+
+  const handleStrengthChange = (id, value) => setSkills(skills.map(s => s.id === id ? { ...s, text: value } : s));
+  const addStrength = () => setSkills([...skills, { id: Date.now(), text: '' }]);
+  const removeStrength = (id) => setSkills(skills.filter(s => s.id !== id));
+
+  const handleComputerKnowledgeChange = (id, value) => setComputerKnowledge(computerKnowledge.map(s => s.id === id ? { ...s, text: value } : s));
+  const addComputerKnowledge = () => setComputerKnowledge([...computerKnowledge, { id: Date.now(), text: '' }]);
+  const removeComputerKnowledge = (id) => setComputerKnowledge(computerKnowledge.filter(s => s.id !== id));
 
   // Custom Fields handlers
   const addCustomField = () => {
@@ -329,7 +412,7 @@ export default function ResumeMaker({ language }) {
         </p>
 
         <div className="flex flex-wrap justify-center gap-3 mb-12">
-          {["All", "Minimalist", "Professional", "Modern", "Creative", "Executive", "With Photo"].map(cat => (
+          {["All", "Basic", "Minimalist", "Professional", "Modern", "Creative", "Executive", "With Photo"].map(cat => (
             <button
               key={cat}
               onClick={() => setActiveFilter(cat)}
@@ -379,6 +462,7 @@ export default function ResumeMaker({ language }) {
             experience={experience}
             education={education}
             skills={skills}
+            computerKnowledge={computerKnowledge}
             t={t}
             isMeasuring={true}
           />
@@ -469,15 +553,45 @@ export default function ResumeMaker({ language }) {
                   <button onClick={() => removeEducation(edu.id)} className="absolute top-3 right-3 p-1.5 text-on-surface-variant hover:text-[#dc2626] hover:bg-[#fef2f2] rounded-md transition-colors" title="Remove education"><span className="material-symbols-outlined text-[18px]">delete</span></button>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-5">
                     <div><label className="block text-xs font-bold mb-1.5 text-on-surface-variant uppercase tracking-wider">{t.institution}</label><input type="text" value={edu.institution} onChange={(e) => handleEducationChange(edu.id, 'institution', e.target.value)} className="w-full bg-surface border border-outline-variant/50 rounded-lg px-3 py-2 text-sm font-medium focus:border-primary outline-none" /></div>
+                    <div><label className="block text-xs font-bold mb-1.5 text-on-surface-variant uppercase tracking-wider">Board/University</label><input type="text" value={edu.board || ''} onChange={(e) => handleEducationChange(edu.id, 'board', e.target.value)} className="w-full bg-surface border border-outline-variant/50 rounded-lg px-3 py-2 text-sm font-medium focus:border-primary outline-none" /></div>
                     <div><label className="block text-xs font-bold mb-1.5 text-on-surface-variant uppercase tracking-wider">{t.degree}</label><input type="text" value={edu.degree} onChange={(e) => handleEducationChange(edu.id, 'degree', e.target.value)} className="w-full bg-surface border border-outline-variant/50 rounded-lg px-3 py-2 text-sm font-medium focus:border-primary outline-none" /></div>
-                    <div className="md:col-span-2"><label className="block text-xs font-bold mb-1.5 text-on-surface-variant uppercase tracking-wider">{t.dates}</label><input type="text" value={edu.dates} onChange={(e) => handleEducationChange(edu.id, 'dates', e.target.value)} className="w-full bg-surface border border-outline-variant/50 rounded-lg px-3 py-2 text-sm font-medium focus:border-primary outline-none" /></div>
+                    <div><label className="block text-xs font-bold mb-1.5 text-on-surface-variant uppercase tracking-wider">{t.dates}</label><input type="text" value={edu.dates} onChange={(e) => handleEducationChange(edu.id, 'dates', e.target.value)} className="w-full bg-surface border border-outline-variant/50 rounded-lg px-3 py-2 text-sm font-medium focus:border-primary outline-none" /></div>
+                    <div><label className="block text-xs font-bold mb-1.5 text-on-surface-variant uppercase tracking-wider">{t.score || "Score / %"}</label><input type="text" value={edu.score || ''} onChange={(e) => handleEducationChange(edu.id, 'score', e.target.value)} className="w-full bg-surface border border-outline-variant/50 rounded-lg px-3 py-2 text-sm font-medium focus:border-primary outline-none" /></div>
                   </div>
                 </div>
               ))}
             </section>
             <section className="space-y-4">
-              <h2 className="text-xl font-black border-b border-outline-variant/20 pb-2 text-on-surface">{t.skills}</h2>
-              <textarea value={skills} onChange={(e) => setSkills(e.target.value)} className="w-full bg-surface border border-outline-variant/50 rounded-lg px-3 py-3 text-sm font-medium focus:border-primary outline-none min-h-[100px] resize-y" />
+              <div className="flex justify-between items-center border-b border-outline-variant/20 pb-2">
+                <h2 className="text-xl font-black text-on-surface">{t.skills}</h2>
+                <button onClick={addStrength} className="text-sm font-bold text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"><span className="material-symbols-outlined text-[18px]">add</span> Add Strength</button>
+              </div>
+              <div className="space-y-3">
+                {skills.map((skill) => (
+                  <div key={skill.id} className="flex items-center gap-2">
+                    <input type="text" placeholder="e.g. HTML" value={skill.text} onChange={(e) => handleStrengthChange(skill.id, e.target.value)} className="flex-1 bg-surface border border-outline-variant/50 rounded-lg px-3 py-2 text-sm font-medium focus:border-primary outline-none transition-colors" />
+                    <button onClick={() => removeStrength(skill.id)} className="p-1.5 text-on-surface-variant hover:text-[#dc2626] hover:bg-[#fef2f2] rounded-md transition-colors flex-shrink-0" title="Remove strength">
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="space-y-4">
+              <div className="flex justify-between items-center border-b border-outline-variant/20 pb-2">
+                <h2 className="text-xl font-black text-on-surface">Computer Knowledge</h2>
+                <button onClick={addComputerKnowledge} className="text-sm font-bold text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"><span className="material-symbols-outlined text-[18px]">add</span> Add Computer Knowledge</button>
+              </div>
+              <div className="space-y-3">
+                {computerKnowledge.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <input type="text" placeholder="e.g. MS Office" value={item.text} onChange={(e) => handleComputerKnowledgeChange(item.id, e.target.value)} className="flex-1 bg-surface border border-outline-variant/50 rounded-lg px-3 py-2 text-sm font-medium focus:border-primary outline-none transition-colors" />
+                    <button onClick={() => removeComputerKnowledge(item.id)} className="p-1.5 text-on-surface-variant hover:text-[#dc2626] hover:bg-[#fef2f2] rounded-md transition-colors flex-shrink-0" title="Remove knowledge">
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </section>
             <section className="space-y-4">
               <div className="flex justify-between items-center border-b border-outline-variant/20 pb-2">
@@ -513,6 +627,7 @@ export default function ResumeMaker({ language }) {
                     experience={experience}
                     education={education}
                     skills={skills}
+                    computerKnowledge={computerKnowledge}
                     t={t}
                     isMeasuring={false}
                     pageData={page}

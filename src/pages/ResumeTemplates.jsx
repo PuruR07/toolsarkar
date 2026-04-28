@@ -1,6 +1,14 @@
 import React from 'react';
 
 export const TEMPLATES = [
+  // Basic
+  { id: 'basic-10th', name: 'Basic - 10th Level', category: 'Basic', desc: 'Traditional tabular format for 10th pass', supportsPhoto: true },
+  { id: 'basic-12th', name: 'Basic - 12th Level', category: 'Basic', desc: 'Traditional tabular format for 12th pass' },
+  { id: 'basic-diploma', name: 'Basic - Diploma', category: 'Basic', desc: 'Traditional tabular format for diploma holders', supportsPhoto: true },
+  { id: 'basic-graduation-diploma', name: 'Basic - Graduation (Diploma)', category: 'Basic', desc: 'Traditional tabular format for graduates with diploma' },
+  { id: 'basic-graduation', name: 'Basic - Graduation', category: 'Basic', desc: 'Traditional tabular format for graduates' },
+  { id: 'basic-masters', name: 'Basic - Masters', category: 'Basic', desc: 'Traditional tabular format for post-graduates', supportsPhoto: true },
+
   // Minimalist
   { id: 'minimalist', name: 'Minimalist', category: 'Minimalist', desc: 'Lots of whitespace, #000000 text' },
   { id: 'elegant', name: 'Elegant', category: 'Minimalist', desc: 'Thin fonts, slate text #475569' },
@@ -38,20 +46,29 @@ export const TEMPLATES = [
 ];
 
 // Helper to filter empty skills
-const getSkillsList = (skills) => skills ? skills.split(',').map(s => s.trim()).filter(s => s) : [];
+const getSkillsList = (skills) => {
+  if (!skills) return [];
+  if (Array.isArray(skills)) return skills.map(s => s.text).filter(Boolean);
+  if (typeof skills === 'string') return skills.split(',').map(s => s.trim()).filter(Boolean);
+  return [];
+};
 
-export const TemplateRenderer = ({ templateId, personalDetails, summary, experience, education, skills, t, isMeasuring, pageData }) => {
+export const TemplateRenderer = ({ templateId, personalDetails, summary, experience, education, skills, computerKnowledge, t, isMeasuring, pageData }) => {
   const { name, email, phone, address, linkedin, profileImage, customFields = [] } = personalDetails;
   const skillsList = getSkillsList(skills);
+  const computerKnowledgeList = getSkillsList(computerKnowledge);
 
   const customFieldsStrings = customFields.filter(cf => cf.value).map(cf => `${cf.label ? cf.label + ': ' : ''}${cf.value}`);
   const contactDetails = [email, phone, linkedin, address].filter(Boolean);
+  const showStrengths = isMeasuring || pageData?.strengths;
+  const showComputerKnowledge = isMeasuring || pageData?.computerKnowledge;
   const showProfile = isMeasuring || pageData?.profile;
+  const showFooter = isMeasuring || pageData?.footer;
 
   const isFirst = isMeasuring || pageData?.isFirst;
   const showHeader = isMeasuring || pageData?.header;
   const showSummary = isMeasuring || pageData?.summary;
-  const showSkills = isMeasuring || pageData?.skills;
+  const showSkills = isMeasuring || pageData?.skills || pageData?.strengths;
 
   const expToRender = isMeasuring ? experience : (pageData?.experience || []);
   const eduToRender = isMeasuring ? education : (pageData?.education || []);
@@ -99,7 +116,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
             <h3 className={headerTitleCss}>{edu.degree}</h3>
             <span className={dateCompanyCss.date}>{edu.dates}</span>
           </div>
-          {edu.institution && <h4 className={dateCompanyCss.company}>{edu.institution}</h4>}
+          {edu.institution && <h4 className={dateCompanyCss.company}>{edu.institution}{edu.score ? ` | ${edu.score}` : ''}</h4>}
         </div>
       ))}
     </div>
@@ -125,6 +142,136 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
     </div>
   );
 
+
+  // ------------------------------------------------------------------------------------------------
+  // CATEGORY: BASIC (Traditional Indian Fresher Resume)
+  // ------------------------------------------------------------------------------------------------
+  if (templateId.startsWith('basic')) {
+    return (
+      <div className="w-full h-full bg-[#ffffff] text-[#000000] p-[40px] font-sans break-words border-[2px] border-transparent">
+        {showHeader && (
+          <div data-measure="header" className="mb-[20px]">
+            <h1 className="text-[20px] font-[700] text-center underline mb-[20px] uppercase">
+              RESUME
+            </h1>
+            <div className="flex justify-between items-start">
+              <div>
+                <h2 className="text-[18px] font-[900] uppercase mb-[8px]">{name}</h2>
+                {contactDetails.map((detail, idx) => (
+                  <div key={idx} className="text-[14px] font-[500] mb-[2px]">{detail}</div>
+                ))}
+              </div>
+              {hasPhoto && TEMPLATES.find(t => t.id === templateId)?.supportsPhoto && (
+                <img src={profileImage} alt="Profile" className="w-[100px] h-[120px] object-cover border-[1px] border-[#000000]" />
+              )}
+            </div>
+          </div>
+        )}
+
+        {showSummary && summary && (
+          <div data-measure="summary" className="mb-[20px]">
+            <h3 className="text-[16px] font-[700] uppercase bg-[#e5e7eb] border-[1px] border-[#000000] px-[8px] py-[4px] mb-[10px]">Career Objective</h3>
+            <p className="text-[14px] leading-[1.6] text-justify">{summary}</p>
+          </div>
+        )}
+
+        {eduToRender.length > 0 && (
+          <div className="mb-[20px]">
+            {isFirst && <h3 className="text-[16px] font-[700] uppercase bg-[#e5e7eb] border-[1px] border-[#000000] px-[8px] py-[4px] mb-[10px]">Academic Qualification</h3>}
+            <table className="w-full border-collapse border border-[#000000] text-[14px] text-center">
+              <thead>
+                <tr>
+                  <th className="border border-[#000000] p-[6px] font-[700]">Qualification</th>
+                  <th className="border border-[#000000] p-[6px] font-[700]">School/College</th>
+                  <th className="border border-[#000000] p-[6px] font-[700]">Board/University</th>
+                  <th className="border border-[#000000] p-[6px] font-[700]">Year of Passing</th>
+                  <th className="border border-[#000000] p-[6px] font-[700]">Percentage/CGPA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eduToRender.map(edu => (
+                  <tr key={edu.id} data-measure="education-item" data-id={edu.id}>
+                    <td className="border border-[#000000] p-[6px]">{edu.degree}</td>
+                    <td className="border border-[#000000] p-[6px]">{edu.institution}</td>
+                    <td className="border border-[#000000] p-[6px]">{edu.board || '-'}</td>
+                    <td className="border border-[#000000] p-[6px]">{edu.dates}</td>
+                    <td className="border border-[#000000] p-[6px]">{edu.score || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {expToRender.length > 0 && (
+          <div className="mb-[20px]">
+            {isFirst && <h3 className="text-[16px] font-[700] uppercase bg-[#e5e7eb] border-[1px] border-[#000000] px-[8px] py-[4px] mb-[10px]">Experience</h3>}
+            <ul className="list-disc list-inside text-[14px] flex flex-col gap-[8px]">
+              {expToRender.map(exp => (
+                <li key={exp.id} data-measure="experience-item" data-id={exp.id}>
+                  <span className="font-[700]">{exp.title}</span> at {exp.company} ({exp.dates})
+                  {exp.description && <p className="ml-[20px] mt-[4px] leading-[1.5] text-justify">{exp.description}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {showComputerKnowledge && computerKnowledgeList.length > 0 && (
+          <div data-measure="computerKnowledge" className="mb-[20px]">
+            <h3 className="text-[16px] font-[700] uppercase bg-[#e5e7eb] border-[1px] border-[#000000] px-[8px] py-[4px] mb-[10px]">Computer Knowledge</h3>
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-2 list-disc list-inside text-[14px]">
+              {computerKnowledgeList.map((item, i) => <li key={i}>{item}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {showStrengths && skillsList.length > 0 && (
+          <div data-measure="strengths" className="mb-[20px]">
+            <h3 className="text-[16px] font-[700] uppercase bg-[#e5e7eb] border-[1px] border-[#000000] px-[8px] py-[4px] mb-[10px]">Strengths</h3>
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-2 list-disc list-inside text-[14px]">
+              {skillsList.map((skill, i) => <li key={i}>{skill}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {showProfile && (
+          <div data-measure="profile" className="mb-[40px]">
+            <h3 className="text-[16px] font-[700] uppercase bg-[#e5e7eb] border-[1px] border-[#000000] px-[8px] py-[4px] mb-[10px]">Personal Details</h3>
+            <div className="text-[14px] flex flex-col gap-[6px]">
+              {name && (
+                <div className="grid grid-cols-[150px_20px_1fr]">
+                  <span className="font-[700]">Name</span>
+                  <span>:</span>
+                  <span>{name}</span>
+                </div>
+              )}
+              {customFields.filter(cf => cf.value).map((cf, i) => (
+                <div key={i} className="grid grid-cols-[150px_20px_1fr]">
+                  <span className="font-[700]">{cf.label}</span>
+                  <span>:</span>
+                  <span>{cf.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showFooter && (
+          <div data-measure="footer" className="flex justify-between items-end text-[14px] font-[700] mt-[40px]">
+            <div>
+              <div>Date: _________________</div>
+              <div className="mt-[10px]">Place: _________________</div>
+            </div>
+            <div className="text-center">
+              <div>_____________________</div>
+              <div className="mt-[4px]">(Signature)</div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // ------------------------------------------------------------------------------------------------
   // CATEGORY 1: MINIMALIST
@@ -1359,6 +1506,32 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
 // MINIATURE TEMPLATE PREVIEWS (CSS only representation)
 // ------------------------------------------------------------------------------------------------
 export const MiniatureTemplate = ({ previewId }) => {
+  if (previewId.startsWith('basic')) return (
+    <div className="w-full h-full p-2 flex flex-col bg-white border border-gray-400">
+      <div className="w-1/3 h-1.5 bg-gray-800 mx-auto mb-2"></div>
+      <div className="flex justify-between mb-2">
+        <div className="w-1/2 flex flex-col gap-0.5">
+          <div className="w-3/4 h-1 bg-gray-800 mb-0.5"></div>
+          <div className="w-1/2 h-0.5 bg-gray-500"></div>
+          <div className="w-1/2 h-0.5 bg-gray-500"></div>
+        </div>
+        <div className="w-4 h-5 border border-gray-400"></div>
+      </div>
+      <div className="w-full h-1 bg-gray-300 border border-gray-400 mb-1"></div>
+      <div className="w-full h-1 bg-gray-200 mb-2"></div>
+      <div className="w-full h-1.5 bg-gray-300 border border-gray-400 mb-0.5"></div>
+      <div className="w-full border border-gray-400 mb-2 flex h-3">
+        <div className="w-1/4 border-r border-gray-400"></div>
+        <div className="w-1/4 border-r border-gray-400"></div>
+        <div className="w-1/4 border-r border-gray-400"></div>
+        <div className="w-1/4"></div>
+      </div>
+      <div className="w-full h-1 bg-gray-300 border border-gray-400 mb-1"></div>
+      <div className="w-2/3 h-0.5 bg-gray-200 mb-0.5"></div>
+      <div className="w-1/2 h-0.5 bg-gray-200 mb-2"></div>
+    </div>
+  );
+
   if (['minimalist', 'clean-lines', 'pure-white'].includes(previewId)) return (
     <div className="w-full h-full p-2 flex flex-col">
       <div className="w-1/2 h-2 bg-gray-800 mb-1"></div>
