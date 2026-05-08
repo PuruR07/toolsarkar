@@ -4,7 +4,7 @@ import 'react-image-crop/dist/ReactCrop.css';
 import { jsPDF } from 'jspdf';
 
 const FORMATS = {
-  normal: { label: 'Normal (3.5 × 4.5 cm)', ratio: 3.5 / 4.5, widthMm: 35, heightMm: 45 },
+  normal: { label: 'Normal (3.15 × 4.05 cm)', ratio: 3.5 / 4.5, widthMm: 31.5, heightMm: 40.5 },
   small: { label: 'Small (2.0 × 2.0 in - US Visa)', ratio: 1, widthMm: 51, heightMm: 51 },
 };
 
@@ -328,7 +328,7 @@ export default function PassportPhotoMaker({ onGenerateComplete, language }) {
           img.crossOrigin = 'anonymous';
           img.onload = () => {
             const { completedCrop, brightness, contrast } = photo;
-            
+
             let srcX, srcY, srcW, srcH;
             if (completedCrop.unit === '%') {
               srcX = (completedCrop.x / 100) * img.naturalWidth;
@@ -458,7 +458,7 @@ export default function PassportPhotoMaker({ onGenerateComplete, language }) {
             currentX = margin;
             currentY += printHeight + gap;
           }
-          
+
           if (currentY + printHeight > A4_HEIGHT - margin) {
             pdf.addPage();
             currentX = margin;
