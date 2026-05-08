@@ -3,40 +3,29 @@ import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { jsPDF } from 'jspdf';
 
-// Aspect ratios for passport formats
 const FORMATS = {
-  normal: { label: 'Normal (3.5 × 4.5 in)', ratio: 3.5 / 4.5 },
-  small: { label: 'Small (1.3 × 1.7 in)', ratio: 1.3 / 1.7 },
+  normal: { label: 'Normal (3.5 × 4.5 cm)', ratio: 3.5 / 4.5, widthMm: 35, heightMm: 45 },
+  small: { label: 'Small (2.0 × 2.0 in - US Visa)', ratio: 1, widthMm: 51, heightMm: 51 },
 };
 
 export default function PassportPhotoMaker({ onGenerateComplete, language }) {
-  // --- State ---
-  const [originalFile, setOriginalFile] = useState(null);
-  const [originalPreview, setOriginalPreview] = useState(null);
-  const [bgRemovedUrl, setBgRemovedUrl] = useState(null);
-  const [bgRemovalStatus, setBgRemovalStatus] = useState('idle'); // idle | processing | done | error
+  // Core Array State
+  const [photos, setPhotos] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const [format, setFormat] = useState('normal');
-  const [crop, setCrop] = useState(undefined);
-  const [completedCrop, setCompletedCrop] = useState(null);
-
-  const [brightness, setBrightness] = useState(100);
-  const [contrast, setContrast] = useState(100);
-
-  const [numCopies, setNumCopies] = useState(6);
+  // Global States
+  const [bgColor, setBgColor] = useState('#ffffff');
   const [includeName, setIncludeName] = useState(false);
-  const [nameText, setNameText] = useState('');
   const [includeDate, setIncludeDate] = useState(false);
   const [useCustomDate, setUseCustomDate] = useState(false);
   const [customDateText, setCustomDateText] = useState('');
-  const [bgColor, setBgColor] = useState('#ffffff');
-
   const [generating, setGenerating] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [modelProgress, setModelProgress] = useState(0); // 0-100 for model download
 
+  // Refs & Worker
   const imgRef = useRef(null);
   const fileInputRef = useRef(null);
+  const workerRef = useRef(null);
 
   // Translations
   const t = {
@@ -116,35 +105,102 @@ export default function PassportPhotoMaker({ onGenerateComplete, language }) {
     reupload: 'Upload New Photo',
   };
 
-  // --- File Upload (uses Web Worker to avoid freezing the UI) ---
-  const handleFile = useCallback((file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    setOriginalFile(file);
-    const previewUrl = URL.createObjectURL(file);
-    setOriginalPreview(previewUrl);
-    setBgRemovedUrl(null);
-    setBgRemovalStatus('processing');
-    setModelProgress(0);
-    setCompletedCrop(null);
-    setCrop(undefined);
-    setBrightness(100);
-    setContrast(100);
-
-    // Offload heavy model inference to a Web Worker so UI stays responsive
-    const worker = new Worker(
-      new URL('../workers/bgRemovalWorker.js', import.meta.url),
-      { type: 'module' }
+  const updateActivePhoto = useCallback((key, value) => {
+    setPhotos((prev) =>
+      prev.map((photo, index) =>
+        index === activeIndex ? { ...photo, [key]: value } : photo
+      )
     );
-    worker.postMessage({ imageBlob: file });
+  }, [activeIndex]);
+
+  const activePhoto = photos[activeIndex] || null;
+
+  // --- File Upload Logic ---
+  const handleFiles = useCallback((filesList) => {
+    const validFiles = Array.from(filesList).filter(f => f.type.startsWith('image/'));
+    if (validFiles.length === 0) return;
+
+    const newPhotos = validFiles.map(file => {
+      const id = crypto.randomUUID();
+      return {
+        id,
+        originalFile: file,
+        originalPreview: URL.createObjectURL(file),
+        bgRemovedUrl: null,
+        bgRemovalStatus: 'queued',
+        modelProgress: 0,
+        brightness: 100,
+        contrast: 100,
+        format: 'normal',
+        numCopies: 6,
+        nameText: '',
+        crop: undefined,
+        completedCrop: null,
+      };
+    });
+
+    setPhotos(prev => {
+      const next = [...prev, ...newPhotos];
+      if (prev.length === 0) setActiveIndex(0);
+      return next;
+    });
+  }, []);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    if (e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+  };
+
+  const handleInputChange = (e) => {
+    if (e.target.files) handleFiles(e.target.files);
+    e.target.value = null;
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotos(prev => {
+      const next = [...prev];
+      next.splice(activeIndex, 1);
+      return next;
+    });
+    if (activeIndex > 0) setActiveIndex(prev => prev - 1);
+  };
+
+  // --- Background Worker Queue Logic ---
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) workerRef.current.terminate();
+    };
+  }, []);
+
+  useEffect(() => {
+    const isProcessing = photos.some(p => p.bgRemovalStatus === 'processing');
+    if (isProcessing) return;
+
+    const nextIndex = photos.findIndex(p => p.bgRemovalStatus === 'queued');
+    if (nextIndex === -1) return;
+
+    const photoToProcess = photos[nextIndex];
+
+    setPhotos(prev => prev.map((p, i) => i === nextIndex ? { ...p, bgRemovalStatus: 'processing', modelProgress: 0 } : p));
+
+    if (!workerRef.current) {
+      workerRef.current = new Worker(
+        new URL('../workers/bgRemovalWorker.js', import.meta.url),
+        { type: 'module' }
+      );
+    }
+
+    const worker = workerRef.current;
+
     worker.onmessage = (e) => {
       const { type, progress, maskData, maskWidth, maskHeight, maskChannels, message } = e.data;
 
       if (type === 'progress') {
-        setModelProgress(progress || 0);
+        setPhotos(prev => prev.map((p, i) => i === nextIndex ? { ...p, modelProgress: progress || 0 } : p));
       } else if (type === 'segmenting') {
-        setModelProgress(100);
+        setPhotos(prev => prev.map((p, i) => i === nextIndex ? { ...p, modelProgress: 100 } : p));
       } else if (type === 'done') {
-        // Composite: apply the mask to the original image on a canvas
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
@@ -152,121 +208,85 @@ export default function PassportPhotoMaker({ onGenerateComplete, language }) {
           canvas.width = img.naturalWidth;
           canvas.height = img.naturalHeight;
           const ctx = canvas.getContext('2d');
-
-          // Draw original image
           ctx.drawImage(img, 0, 0);
 
-          // Get the pixel data
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const pixels = imageData.data;
+          const mW = maskWidth, mH = maskHeight, iW = canvas.width, iH = canvas.height;
 
-          // Scale mask to image dimensions if they differ
-          const mW = maskWidth;
-          const mH = maskHeight;
-          const iW = canvas.width;
-          const iH = canvas.height;
-
-          // Apply mask as alpha channel
           for (let y = 0; y < iH; y++) {
             for (let x = 0; x < iW; x++) {
               const iIdx = (y * iW + x) * 4;
-              // Map image coords to mask coords
               const mX = Math.floor((x / iW) * mW);
               const mY = Math.floor((y / iH) * mH);
               const mIdx = (mY * mW + mX) * (maskChannels || 1);
-              // The mask value (0-255): 255 = foreground, 0 = background
-              const maskVal = maskData[mIdx];
-              pixels[iIdx + 3] = maskVal; // Set alpha
+              pixels[iIdx + 3] = maskData[mIdx];
             }
           }
-
           ctx.putImageData(imageData, 0, 0);
 
           canvas.toBlob((blob) => {
             if (blob) {
               const url = URL.createObjectURL(blob);
-              setBgRemovedUrl(url);
-              setBgRemovalStatus('done');
+              setPhotos(prev => prev.map((p, i) => i === nextIndex ? { ...p, bgRemovedUrl: url, bgRemovalStatus: 'done' } : p));
             } else {
-              setBgRemovalStatus('error');
+              setPhotos(prev => prev.map((p, i) => i === nextIndex ? { ...p, bgRemovalStatus: 'error' } : p));
             }
-            worker.terminate();
           }, 'image/png');
         };
         img.onerror = () => {
-          setBgRemovalStatus('error');
-          worker.terminate();
+          setPhotos(prev => prev.map((p, i) => i === nextIndex ? { ...p, bgRemovalStatus: 'error' } : p));
         };
-        img.src = previewUrl;
+        img.src = photoToProcess.originalPreview;
       } else if (type === 'error') {
         console.error('Background removal worker error:', message);
-        setBgRemovalStatus('error');
-        worker.terminate();
+        setPhotos(prev => prev.map((p, i) => i === nextIndex ? { ...p, bgRemovalStatus: 'error' } : p));
       }
     };
+
     worker.onerror = (err) => {
       console.error('Worker error:', err);
-      setBgRemovalStatus('error');
-      worker.terminate();
+      setPhotos(prev => prev.map((p, i) => i === nextIndex ? { ...p, bgRemovalStatus: 'error' } : p));
     };
-  }, []);
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
-  };
-
-  const handleInputChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  };
-
-  const handleReupload = () => {
-    setOriginalFile(null);
-    setOriginalPreview(null);
-    setBgRemovedUrl(null);
-    setBgRemovalStatus('idle');
-    setCompletedCrop(null);
-    setCrop(undefined);
-    setBrightness(100);
-    setContrast(100);
-  };
+    worker.postMessage({ imageBlob: photoToProcess.originalFile });
+  }, [photos]);
 
   // --- Auto-set initial crop when image loads or format changes ---
-  const onImageLoad = useCallback((e) => {
-    imgRef.current = e.currentTarget;
+  const onImageLoad = (e) => {
+    const activePhoto = photos[activeIndex];
+    if (!activePhoto) return;
+
     const { width, height } = e.currentTarget;
-    if (!width || !height) return;
-    const aspect = FORMATS[format].ratio;
+    const aspect = FORMATS[activePhoto.format || 'normal'].ratio;
 
-    // Calculate centered initial crop in PIXELS (display pixels)
-    let cropW, cropH;
-    if (width / height > aspect) {
-      cropH = height * 0.9;
-      cropW = cropH * aspect;
-    } else {
-      cropW = width * 0.9;
-      cropH = cropW / aspect;
+    // Calculate a default crop box covering 80% of the image
+    let cropWidth = width * 0.8;
+    let cropHeight = cropWidth / aspect;
+
+    if (cropHeight > height * 0.8) {
+      cropHeight = height * 0.8;
+      cropWidth = cropHeight * aspect;
     }
-    const newCrop = {
-      unit: 'px',
-      x: (width - cropW) / 2,
-      y: (height - cropH) / 2,
-      width: cropW,
-      height: cropH,
-    };
-    setCrop(newCrop);
-    setCompletedCrop(newCrop);
-  }, [format]);
 
-  // Reset crop when format changes
+    const percentCrop = {
+      unit: '%',
+      x: ((width - cropWidth) / 2 / width) * 100,
+      y: ((height - cropHeight) / 2 / height) * 100,
+      width: (cropWidth / width) * 100,
+      height: (cropHeight / height) * 100
+    };
+
+    // Update both states to unlock the Generate button immediately
+    updateActivePhoto('crop', percentCrop);
+    updateActivePhoto('completedCrop', percentCrop);
+  };
+
   useEffect(() => {
-    if (imgRef.current && bgRemovedUrl) {
+    if (imgRef.current && activePhoto?.bgRemovedUrl && activePhoto?.format) {
       const { width, height } = imgRef.current;
       if (!width || !height) return;
-      const aspect = FORMATS[format].ratio;
+      const aspect = FORMATS[activePhoto.format].ratio;
       let cropW, cropH;
       if (width / height > aspect) {
         cropH = height * 0.9;
@@ -275,285 +295,198 @@ export default function PassportPhotoMaker({ onGenerateComplete, language }) {
         cropW = width * 0.9;
         cropH = cropW / aspect;
       }
-      const newCrop = {
-        unit: 'px',
-        x: (width - cropW) / 2,
-        y: (height - cropH) / 2,
-        width: cropW,
-        height: cropH,
+      const percentCrop = {
+        unit: '%',
+        x: ((width - cropW) / 2 / width) * 100,
+        y: ((height - cropH) / 2 / height) * 100,
+        width: (cropW / width) * 100,
+        height: (cropH / height) * 100
       };
-      setCrop(newCrop);
-      setCompletedCrop(newCrop);
+      updateActivePhoto('crop', percentCrop);
+      updateActivePhoto('completedCrop', percentCrop);
     }
-  }, [format, bgRemovedUrl]);
-
-  // --- Get cropped canvas ---
-  const getCroppedCanvas = useCallback(() => {
-    if (!imgRef.current || !completedCrop?.width || !completedCrop?.height) return null;
-    const image = imgRef.current;
-
-    // completedCrop is in display pixels; scale to natural image pixels
-    const scaleX = image.naturalWidth / image.width;
-    const scaleY = image.naturalHeight / image.height;
-
-    const srcX = completedCrop.x * scaleX;
-    const srcY = completedCrop.y * scaleY;
-    const srcW = completedCrop.width * scaleX;
-    const srcH = completedCrop.height * scaleY;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = srcW;
-    canvas.height = srcH;
-    const ctx = canvas.getContext('2d');
-
-    // 1. Draw the subject FIRST (without the background) and apply lighting
-    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
-    ctx.drawImage(
-      image,
-      srcX, srcY, srcW, srcH,
-      0, 0, srcW, srcH
-    );
-
-    // 2. Clear the filter so it doesn't mess with our pixel math
-    ctx.filter = 'none';
-
-    // 3. 🧠 ALPHA BLEED FIX: Harden the core subject
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-
-    // Loop through every pixel's Alpha (opacity) channel
-    for (let i = 3; i < data.length; i += 4) {
-      // If the AI made the pixel more than 85% solid (like the face),
-      // we force it to be 100% solid (255). 
-      if (data[i] > 215) {
-        data[i] = 255;
-      }
-    }
-    ctx.putImageData(imageData, 0, 0);
-
-    // 4. Slide the selected background color BEHIND the newly solid subject
-    ctx.globalCompositeOperation = 'destination-over';
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Reset composite operation to default
-    ctx.globalCompositeOperation = 'source-over';
-
-    return canvas;
-  }, [completedCrop, brightness, contrast, bgColor]);
+  }, [activePhoto?.format, activePhoto?.bgRemovedUrl, updateActivePhoto]);
 
   // --- PDF Generation ---
   const generatePDF = useCallback(async () => {
-    const canvas = getCroppedCanvas();
-    if (!canvas) return;
+    const validPhotos = photos.filter(p => p.completedCrop);
+    if (validPhotos.length === 0) return;
     setGenerating(true);
 
     try {
-      // A4 dimensions in inches (8.27 × 11.69)
-      const A4_W = 8.27;
-      const A4_H = 11.69;
-      const GAP = 0.19685; // 5mm ≈ 0.19685 inches
-      const MARGIN = 0.394; // 1cm ≈ 0.394 inches
-      const COLS = 6;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const margin = 5;
+      const gap = 2;
+      const A4_WIDTH = 210;
+      const A4_HEIGHT = 297;
+      let currentX = margin;
+      let currentY = margin;
 
-      // Photo dimensions based on selected format (in inches)
-      let photoW, photoH;
+      for (const photo of validPhotos) {
+        const { dataUrl, finalDateStr } = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const { completedCrop, brightness, contrast } = photo;
+            
+            let srcX, srcY, srcW, srcH;
+            if (completedCrop.unit === '%') {
+              srcX = (completedCrop.x / 100) * img.naturalWidth;
+              srcY = (completedCrop.y / 100) * img.naturalHeight;
+              srcW = (completedCrop.width / 100) * img.naturalWidth;
+              srcH = (completedCrop.height / 100) * img.naturalHeight;
+            } else {
+              const renderedHeight = Math.min(img.naturalHeight, 350);
+              const renderedWidth = img.naturalWidth * (renderedHeight / img.naturalHeight);
+              const scaleX = img.naturalWidth / renderedWidth;
+              const scaleY = img.naturalHeight / renderedHeight;
+              srcX = completedCrop.x * scaleX;
+              srcY = completedCrop.y * scaleY;
+              srcW = completedCrop.width * scaleX;
+              srcH = completedCrop.height * scaleY;
+            }
 
-      if (format === 'normal') {
-        photoW = 3.5;
-        photoH = 4.5;
-      } else {
-        photoW = 1.3;
-        photoH = 1.7;
-      }
+            const canvas = document.createElement('canvas');
+            canvas.width = srcW;
+            canvas.height = srcH;
+            const ctx = canvas.getContext('2d');
 
-      // Calculate usable area
-      const usableW = A4_W - 2 * MARGIN;
-      const usableH = A4_H - 2 * MARGIN;
+            ctx.filter = `brightness(${brightness || 100}%) contrast(${contrast || 100}%)`;
+            ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+            ctx.filter = 'none';
 
-      // Grid with exactly 6 per row
-      const totalGridW = COLS * photoW + (COLS - 1) * GAP;
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            for (let i = 3; i < data.length; i += 4) {
+              if (data[i] > 215) data[i] = 255;
+            }
+            ctx.putImageData(imageData, 0, 0);
 
-      // Scale factor if grid exceeds printable width
-      let scale = 1;
-      if (totalGridW > usableW) {
-        scale = usableW / totalGridW;
-      }
+            ctx.globalCompositeOperation = 'destination-over';
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'source-over';
 
-      const scaledPhotoW = photoW * scale;
-      const scaledPhotoH = photoH * scale;
-      const scaledGap = GAP * scale;
+            let dateStr = '';
+            if (includeDate) {
+              const now = new Date();
+              let ds = now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+              dateStr = (useCustomDate && customDateText.trim() !== '') ? customDateText.trim() : ds;
+            }
 
-      const actualGridW = COLS * scaledPhotoW + (COLS - 1) * scaledGap;
-      const rows = Math.ceil(numCopies / COLS);
-      const actualGridH = rows * scaledPhotoH + (rows - 1) * scaledGap;
+            if (!includeName && !includeDate) {
+              resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.95), finalDateStr: dateStr });
+              return;
+            }
 
-      // Check vertical scaling
-      let vScale = 1;
-      if (actualGridH > usableH) {
-        vScale = usableH / actualGridH;
-      }
-      const finalScale = Math.min(1, vScale);
-      const finalPhotoW = scaledPhotoW * finalScale;
-      const finalPhotoH = scaledPhotoH * finalScale;
-      const finalGap = scaledGap * finalScale;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.drawImage(canvas, 0, 0);
 
-      const finalGridW = COLS * finalPhotoW + (COLS - 1) * finalGap;
-      const finalGridH = rows * finalPhotoH + (rows - 1) * finalGap;
+            const stripH = Math.max(canvas.height * 0.18, 50);
+            const sidePadding = 15;
+            const nameFontSize = Math.max(stripH * 0.50, 30);
+            const maxLetterSpacing = 5;
 
-      // Top align the grid
-      const offsetX = (A4_W - finalGridW) / 2;
-      // Shift grid upward: Cuts the top margin in half (from ~1cm to ~0.5cm)
-      const offsetY = 0.15;
+            tCtx.fillStyle = '#ffffff';
+            tCtx.fillRect(0, canvas.height - stripH, canvas.width, stripH);
+            tCtx.fillStyle = '#000000';
+            tCtx.textBaseline = 'middle';
 
-      // Generate image data from canvas
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+            const drawJustifiedText = (text, y, initialFontSize, maxGap) => {
+              let fontSize = initialFontSize;
+              tCtx.font = `600 ${fontSize}px Arial, "Courier New", sans-serif`;
+              const textStr = text.trim().toUpperCase();
+              const availableWidth = canvas.width - (sidePadding * 2);
 
-      // Create a temp canvas for each photo with date/name overlay if needed
-      const getPhotoDataUrl = () => {
-        if (!includeName && !includeDate) return imgData;
+              let fullTextWidth = tCtx.measureText(textStr).width;
+              const scaleFactor = availableWidth / fullTextWidth;
+              fontSize = Math.floor(fontSize * scaleFactor);
 
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = canvas.width;
-        tempCanvas.height = canvas.height;
-        const ctx = tempCanvas.getContext('2d');
-        ctx.drawImage(canvas, 0, 0);
+              const maxAllowedSize = initialFontSize * 1.35;
+              if (fontSize > maxAllowedSize) fontSize = maxAllowedSize;
 
-        // ==========================================
-        // MANUAL TWEAKING VARIABLES
-        // ==========================================
-        const stripH = Math.max(canvas.height * 0.18, 50);
-        const sidePadding = 15;
-        const nameFontSize = Math.max(stripH * 0.50, 30);
-        const dateFontSize = Math.max(stripH * 0.40, 24);
-        const maxLetterSpacing = 5;
-        // ==========================================
+              tCtx.font = `600 ${fontSize}px sans-serif, "Courier New", Arial`;
 
-        // Draw the white strip
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, canvas.height - stripH, canvas.width, stripH);
+              const chars = textStr.split('');
+              let totalCharWidth = 0;
+              chars.forEach(char => { totalCharWidth += tCtx.measureText(char).width; });
 
-        // Resolve Final Date String for context (used later by jsPDF)
-        let finalDateStr = '';
-        if (includeDate) {
-          const now = new Date();
-          let dateStr = now.toLocaleDateString('en-GB', {
-            day: '2-digit', month: '2-digit', year: 'numeric'
-          });
-          finalDateStr = (useCustomDate && customDateText.trim() !== '') ? customDateText.trim() : dateStr;
-        }
+              let gap = (availableWidth - totalCharWidth) / (chars.length - 1);
 
-        ctx.fillStyle = '#000000';
-        ctx.textBaseline = 'middle';
+              if (totalCharWidth >= availableWidth || chars.length <= 1) {
+                tCtx.textAlign = 'center';
+                tCtx.fillText(textStr, canvas.width / 2, y);
+                return;
+              }
 
-        // CUSTOM TEXT JUSTIFICATION ENGINE (with Auto-Scaling Up & Down)
-        const drawJustifiedText = (text, y, initialFontSize, maxGap) => {
-          let fontSize = initialFontSize;
-          ctx.font = `600 ${fontSize}px Arial, "Courier New", sans-serif`;
-          const textStr = text.trim().toUpperCase();
-          const availableWidth = canvas.width - (sidePadding * 2);
+              gap = Math.min(gap, maxGap);
+              tCtx.textAlign = 'left';
+              const blockWidth = totalCharWidth + (gap * (chars.length - 1));
+              let cX = (canvas.width - blockWidth) / 2;
 
-          let fullTextWidth = ctx.measureText(textStr).width;
+              chars.forEach(char => {
+                tCtx.fillText(char, cX, y);
+                cX += tCtx.measureText(char).width + gap;
+              });
+            };
 
-          // Step 1: Calculate ratio needed to make it fit width exactly
-          // (This mathematically works for shrinking big names AND stretching small names)
-          const scaleFactor = availableWidth / fullTextWidth;
-          fontSize = Math.floor(fontSize * scaleFactor);
+            const nameText = photo.nameText || '';
+            const hasName = includeName && nameText.trim() !== '';
 
-          // Step 2: CRITICAL - Prevent short names from getting comically tall!
-          // We cap the font size so it doesn't grow more than 35% larger than the base size.
-          const maxAllowedSize = initialFontSize * 1.35;
-          if (fontSize > maxAllowedSize) {
-            fontSize = maxAllowedSize;
-          }
+            if (hasName && includeDate) {
+              const line1Y = canvas.height - stripH * 0.75;
+              drawJustifiedText(nameText, line1Y, nameFontSize, maxLetterSpacing);
+            } else if (hasName) {
+              drawJustifiedText(nameText, canvas.height - stripH / 2, nameFontSize, maxLetterSpacing);
+            }
 
-          // Re-apply the new perfectly calculated font size
-          ctx.font = `600 ${fontSize}px  sans-serif, "Courier New", Arial`;
+            resolve({ dataUrl: tempCanvas.toDataURL('image/jpeg', 0.95), finalDateStr: dateStr });
+          };
+          img.onerror = reject;
+          img.src = photo.bgRemovedUrl || photo.originalPreview;
+        });
 
-          // Step 3: Measure individual characters for justification
-          const chars = textStr.split('');
-          let totalCharWidth = 0;
-          chars.forEach(char => {
-            totalCharWidth += ctx.measureText(char).width;
-          });
+        const formatConfig = FORMATS[photo.format || 'normal'];
+        const printWidth = formatConfig.widthMm;
+        const printHeight = formatConfig.heightMm;
 
-          let gap = (availableWidth - totalCharWidth) / (chars.length - 1);
-
-          if (totalCharWidth >= availableWidth || chars.length <= 1) {
-            ctx.textAlign = 'center';
-            ctx.fillText(textStr, canvas.width / 2, y);
-            return;
-          }
-
-          gap = Math.min(gap, maxGap);
-
-          ctx.textAlign = 'left';
-          const blockWidth = totalCharWidth + (gap * (chars.length - 1));
-          let currentX = (canvas.width - blockWidth) / 2;
-
-          chars.forEach(char => {
-            ctx.fillText(char, currentX, y);
-            currentX += ctx.measureText(char).width + gap;
-          });
-        };
-
-        const hasName = includeName && nameText.trim() !== '';
-
-        if (hasName && includeDate) {
-          // Push name up to make space for the date added via jsPDF
-          const line1Y = canvas.height - stripH * 0.75;
-          drawJustifiedText(nameText, line1Y, nameFontSize, maxLetterSpacing);
-        } else if (hasName) {
-          // Just the name, centered vertically in the strip
-          drawJustifiedText(nameText, canvas.height - stripH / 2, nameFontSize, maxLetterSpacing);
-        } else if (includeDate) {
-          // No name, just the strip for the date. We do not draw the date here!
-        }
-
-        return { tempImgData: tempCanvas.toDataURL('image/jpeg', 0.95), finalDateStr };
-      };
-
-      const result = getPhotoDataUrl();
-      // Handle the fallback if getPhotoDataUrl doesn't return an object when using unmodified imgData
-      const finalImgData = typeof result === 'string' ? result : result.tempImgData;
-      const parsedDateStr = typeof result === 'string' ? '' : result.finalDateStr;
-
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'in',
-        format: 'a4',
-      });
-
-      let placed = 0;
-      for (let row = 0; row < rows && placed < numCopies; row++) {
-        for (let col = 0; col < COLS && placed < numCopies; col++) {
-          const x = offsetX + col * (finalPhotoW + finalGap);
-          const y = offsetY + row * (finalPhotoH + finalGap);
-          doc.addImage(finalImgData, 'JPEG', x, y, finalPhotoW, finalPhotoH);
-          // Add a thin black border around each photo so they are easier to cut
-          doc.setDrawColor(0, 0, 0);
-          doc.setLineWidth(0.005);
-          doc.rect(x, y, finalPhotoW, finalPhotoH, 'S');
-          
-          if (includeDate && parsedDateStr) {
-            // Explicitly set very small font size for unobtrusive date text
-            doc.setFontSize(8);
-            doc.setTextColor(0, 0, 0);
-            doc.text(parsedDateStr, x + finalPhotoW / 2, y + finalPhotoH - 0.02, { align: 'center' });
+        for (let i = 0; i < photo.numCopies; i++) {
+          if (currentX + printWidth > A4_WIDTH - margin) {
+            currentX = margin;
+            currentY += printHeight + gap;
           }
           
-          placed++;
+          if (currentY + printHeight > A4_HEIGHT - margin) {
+            pdf.addPage();
+            currentX = margin;
+            currentY = margin;
+          }
+
+          pdf.addImage(dataUrl, 'JPEG', currentX, currentY, printWidth, printHeight);
+          pdf.setDrawColor(0, 0, 0);
+          pdf.setLineWidth(0.1);
+          pdf.rect(currentX, currentY, printWidth, printHeight, 'S');
+
+          if (includeDate && finalDateStr) {
+            pdf.setFontSize(8);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(finalDateStr, currentX + printWidth / 2, currentY + printHeight - 1, { align: 'center' });
+          }
+
+          currentX += printWidth + gap;
         }
       }
 
-      const pdfBlob = doc.output('blob');
+      const pdfBlob = pdf.output('blob');
       const pdfFile = new File([pdfBlob], 'passport_photos.pdf', { type: 'application/pdf' });
 
       if (onGenerateComplete) {
         onGenerateComplete(pdfFile);
       }
 
-      // Also trigger download
       const url = URL.createObjectURL(pdfBlob);
       const a = document.createElement('a');
       a.href = url;
@@ -568,13 +501,12 @@ export default function PassportPhotoMaker({ onGenerateComplete, language }) {
     } finally {
       setGenerating(false);
     }
-  }, [getCroppedCanvas, format, numCopies, includeName, includeDate, nameText, useCustomDate, customDateText, onGenerateComplete]);
-
+  }, [photos, includeName, includeDate, useCustomDate, customDateText, bgColor, onGenerateComplete]);
 
   // =========== RENDER ===========
 
-  // Step 1: Upload
-  if (!originalFile) {
+  // Step 1: Upload (if no photos at all)
+  if (photos.length === 0) {
     return (
       <div className="flex flex-col items-center gap-6 w-full animate-fade-in">
         <div
@@ -594,6 +526,7 @@ export default function PassportPhotoMaker({ onGenerateComplete, language }) {
           </div>
           <input
             type="file"
+            multiple
             ref={fileInputRef}
             className="hidden"
             accept="image/jpeg,image/png,image/webp"
@@ -604,294 +537,337 @@ export default function PassportPhotoMaker({ onGenerateComplete, language }) {
     );
   }
 
-  // Step 2: Processing background removal
-  if (bgRemovalStatus === 'processing') {
-    const statusText = modelProgress < 100
-      ? (language === 'hi'
-        ? `AI मॉडल डाउनलोड हो रहा है: ${modelProgress}%...`
-        : `Downloading AI Model: ${modelProgress}%...`)
-      : t.processing;
-
-    return (
-      <div className="flex flex-col items-center gap-6 w-full animate-fade-in">
-        <div className="bg-surface-container-lowest p-8 sm:p-10 rounded-3xl border border-outline-variant/20 shadow-lg w-full max-w-xl flex flex-col items-center gap-6">
-          {/* Original image preview */}
-          <div className="w-40 h-40 rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 shadow-inner">
-            <img src={originalPreview} alt="Original" className="w-full h-full object-cover" />
-          </div>
-          {/* Loading animation */}
-          <div className="flex flex-col items-center gap-4 w-full">
-            <div className="relative">
-              <span className="material-symbols-outlined text-5xl text-primary animate-spin" data-icon="progress_activity">
-                progress_activity
-              </span>
-            </div>
-            <p className="text-primary font-bold text-lg text-center">{statusText}</p>
-            <div className="w-full max-w-xs h-2 bg-surface-container-highest rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${modelProgress < 100 ? modelProgress : 100}%` }}
-              />
-            </div>
-            {modelProgress < 100 && (
-              <p className="text-xs text-on-surface-variant">
-                {language === 'hi' ? 'पहली बार डाउनलोड होगा, उसके बाद कैश हो जाएगा' : 'First download only — cached for future use'}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 2b: Background removal error
-  if (bgRemovalStatus === 'error') {
-    return (
-      <div className="flex flex-col items-center gap-6 w-full animate-fade-in">
-        <div className="bg-surface-container-lowest p-8 rounded-3xl border border-error/30 shadow-lg w-full max-w-xl flex flex-col items-center gap-5">
-          <span className="material-symbols-outlined text-5xl text-error" data-icon="error">error</span>
-          <p className="text-error font-bold text-lg text-center">{t.bgError}</p>
-          <button
-            onClick={handleReupload}
-            className="px-8 py-3 bg-primary text-on-primary rounded-xl font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
-          >
-            {t.reupload}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 3: Crop + Adjust + Generate
+  // Common wrapper for Steps 2 and 3 so the thumbnail strip is always visible when photos exist
   return (
     <div className="flex flex-col gap-8 w-full animate-fade-in">
-      {/* Success badge */}
-      <div className="flex items-center justify-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-xl mx-auto">
-        <span className="material-symbols-outlined text-primary text-xl" data-icon="check_circle">check_circle</span>
-        <span className="text-primary font-semibold text-sm">{t.bgDone}</span>
-      </div>
+      {/* Hidden file input for adding more photos */}
+      <input
+        type="file"
+        multiple
+        ref={fileInputRef}
+        className="hidden"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={handleInputChange}
+      />
 
-      {/* Format Selector */}
-      <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-md">
-        <label className="text-sm font-bold text-on-surface block mb-3">{t.formatLabel}</label>
-        <div className="flex gap-3">
-          {Object.entries(FORMATS).map(([key, val]) => (
-            <button
-              key={key}
-              onClick={() => setFormat(key)}
-              className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 border
-                ${format === key
-                  ? 'bg-primary text-on-primary border-primary shadow-md'
-                  : 'bg-surface-container text-on-surface-variant border-outline-variant/30 hover:border-primary/40 hover:text-on-surface'}`}
+      {/* Thumbnail Strip (Rendered as soon as we have photos) */}
+      {photos.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto p-4 bg-surface-container-lowest rounded-lg mb-4 border border-outline-variant/20 shadow-sm">
+          {photos.map((photo, index) => (
+            <div
+              key={photo.id}
+              onClick={() => setActiveIndex(index)}
+              className={`relative flex-shrink-0 w-20 h-20 cursor-pointer border-4 rounded-md overflow-hidden transition-all ${activeIndex === index ? 'border-primary shadow-lg' : 'border-transparent opacity-60 hover:opacity-100'}`}
             >
-              {val.label}
-            </button>
+              <img src={photo.bgRemovedUrl || photo.originalPreview} className="w-full h-full object-cover" alt="thumbnail" style={photo.bgRemovedUrl ? { backgroundColor: bgColor } : {}} />
+              {photo.bgRemovalStatus === 'processing' && (
+                <div className="absolute inset-0 bg-surface/60 flex items-center justify-center text-on-surface text-[10px] font-bold text-center p-1 leading-tight backdrop-blur-sm">
+                  {language === 'hi' ? 'प्रक्रिया...' : 'Processing...'}
+                </div>
+              )}
+              {photo.bgRemovalStatus === 'queued' && (
+                <div className="absolute inset-0 bg-surface/40 flex items-center justify-center text-on-surface text-[10px] font-bold text-center p-1 leading-tight backdrop-blur-sm">
+                  {language === 'hi' ? 'कतारबद्ध' : 'Queued'}
+                </div>
+              )}
+              {photo.bgRemovalStatus === 'error' && (
+                <div className="absolute inset-0 bg-error/40 flex items-center justify-center text-on-error text-[10px] font-bold text-center p-1 leading-tight backdrop-blur-sm">
+                  Error
+                </div>
+              )}
+            </div>
           ))}
-        </div>
-      </div>
-
-      {/* Cropping Area */}
-      <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-md">
-        <h3 className="text-sm font-bold text-on-surface mb-1">{t.cropTitle}</h3>
-        <p className="text-xs text-on-surface-variant mb-4">{t.cropDesc}</p>
-        <div className="flex justify-center bg-surface-container rounded-xl p-3 border border-outline-variant/10 overflow-hidden">
-          {bgRemovedUrl && (
-            <ReactCrop
-              crop={crop}
-              onChange={(c) => setCrop(c)}
-              onComplete={(c) => setCompletedCrop(c)}
-              aspect={FORMATS[format].ratio}
-              className="max-h-[400px]"
-            >
-              <img
-                src={bgRemovedUrl}
-                alt="Crop preview"
-                onLoad={onImageLoad}
-                ref={imgRef}
-                className="max-h-[400px] object-contain"
-                style={{ filter: `brightness(${brightness}%) contrast(${contrast}%)` }}
-              />
-            </ReactCrop>
-          )}
-        </div>
-      </div>
-
-      {/* Lighting Adjustments */}
-      <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-md">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
-            <span className="material-symbols-outlined text-lg text-primary" data-icon="tune">tune</span>
-            {t.brightnessLabel} & {t.contrastLabel}
-          </h3>
           <button
-            onClick={() => { setBrightness(100); setContrast(100); }}
-            className="text-xs text-primary font-bold hover:text-primary/80 transition-colors px-3 py-1 bg-primary/5 rounded-lg"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-shrink-0 w-20 h-20 rounded-md border-2 border-dashed border-outline-variant/50 flex flex-col items-center justify-center gap-1 text-on-surface-variant hover:border-primary/50 hover:text-primary transition-all cursor-pointer bg-surface-container"
           >
-            {t.resetFilters}
+            <span className="material-symbols-outlined text-2xl" data-icon="add">add</span>
+            <span className="text-[10px] font-semibold">{language === 'hi' ? 'और जोड़ें' : 'Add More'}</span>
           </button>
         </div>
-        <div className="space-y-5">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-semibold text-on-surface-variant">{t.brightnessLabel}</label>
-              <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">{brightness}%</span>
+      )}
+
+      {/* Step 2: Processing background removal for Active Photo */}
+      {activePhoto?.bgRemovalStatus === 'processing' && (
+        <div className="flex flex-col items-center gap-6 w-full animate-fade-in">
+          <div className="bg-surface-container-lowest p-8 sm:p-10 rounded-3xl border border-outline-variant/20 shadow-lg w-full max-w-xl flex flex-col items-center gap-6">
+            <div className="w-40 h-40 rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/20 shadow-inner">
+              <img src={activePhoto.originalPreview} alt="Original" className="w-full h-full object-cover" />
             </div>
-            <input
-              type="range" min="50" max="200" value={brightness}
-              onChange={(e) => setBrightness(Number(e.target.value))}
-              className="w-full h-2 rounded-full appearance-none cursor-pointer bg-surface-container-highest accent-primary"
-            />
-          </div>
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-semibold text-on-surface-variant">{t.contrastLabel}</label>
-              <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">{contrast}%</span>
+            <div className="flex flex-col items-center gap-4 w-full">
+              <div className="relative">
+                <span className="material-symbols-outlined text-5xl text-primary animate-spin" data-icon="progress_activity">
+                  progress_activity
+                </span>
+              </div>
+              <p className="text-primary font-bold text-lg text-center">
+                {activePhoto.modelProgress < 100
+                  ? (language === 'hi' ? `AI मॉडल डाउनलोड हो रहा है: ${activePhoto.modelProgress}%...` : `Downloading AI Model: ${activePhoto.modelProgress}%...`)
+                  : t.processing}
+              </p>
+              <div className="w-full max-w-xs h-2 bg-surface-container-highest rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${activePhoto.modelProgress < 100 ? activePhoto.modelProgress : 100}%` }}
+                />
+              </div>
+              {activePhoto.modelProgress < 100 && (
+                <p className="text-xs text-on-surface-variant">
+                  {language === 'hi' ? 'पहली बार डाउनलोड होगा, उसके बाद कैश हो जाएगा' : 'First download only — cached for future use'}
+                </p>
+              )}
             </div>
-            <input
-              type="range" min="50" max="200" value={contrast}
-              onChange={(e) => setContrast(Number(e.target.value))}
-              className="w-full h-2 rounded-full appearance-none cursor-pointer bg-surface-container-highest accent-primary"
-            />
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Print Configuration */}
-      <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-md">
-        <h3 className="text-sm font-bold text-on-surface mb-4 flex items-center gap-2">
-          <span className="material-symbols-outlined text-lg text-primary" data-icon="print">print</span>
-          {t.printConfig}
-        </h3>
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs font-semibold text-on-surface-variant block mb-2">{t.copies}</label>
-            <div className="flex gap-2 flex-wrap">
-              {[6, 12, 24, 30].map((n) => (
+      {/* Step 2b: Background removal error for Active Photo */}
+      {activePhoto?.bgRemovalStatus === 'error' && (
+        <div className="flex flex-col items-center gap-6 w-full animate-fade-in">
+          <div className="bg-surface-container-lowest p-8 rounded-3xl border border-error/30 shadow-lg w-full max-w-xl flex flex-col items-center gap-5">
+            <span className="material-symbols-outlined text-5xl text-error" data-icon="error">error</span>
+            <p className="text-error font-bold text-lg text-center">{t.bgError}</p>
+            <button
+              onClick={handleRemovePhoto}
+              className="px-8 py-3 bg-primary text-on-primary rounded-xl font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+            >
+              {language === 'hi' ? 'हटाएं' : 'Remove Photo'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Crop + Adjust + Generate for Active Photo */}
+      {activePhoto?.bgRemovalStatus === 'done' && (
+        <div className="flex flex-col gap-8 w-full animate-fade-in">
+          <div className="flex items-center justify-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-xl mx-auto">
+            <span className="material-symbols-outlined text-primary text-xl" data-icon="check_circle">check_circle</span>
+            <span className="text-primary font-semibold text-sm">{t.bgDone}</span>
+          </div>
+
+          {/* Format Selector */}
+          <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-md">
+            <label className="text-sm font-bold text-on-surface block mb-3">{t.formatLabel}</label>
+            <div className="flex gap-3">
+              {Object.entries(FORMATS).map(([key, val]) => (
                 <button
-                  key={n}
-                  onClick={() => setNumCopies(n)}
-                  className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 border
-                    ${numCopies === n
+                  key={key}
+                  onClick={() => updateActivePhoto('format', key)}
+                  className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 border
+                    ${activePhoto?.format === key
                       ? 'bg-primary text-on-primary border-primary shadow-md'
                       : 'bg-surface-container text-on-surface-variant border-outline-variant/30 hover:border-primary/40 hover:text-on-surface'}`}
                 >
-                  {n}
+                  {val.label}
                 </button>
               ))}
-              <input
-                type="number" min="1" max="100" value={numCopies}
-                onChange={(e) => setNumCopies(Math.max(1, Math.min(100, Number(e.target.value))))}
-                className="w-20 px-3 py-2 rounded-xl border border-outline-variant/30 bg-surface-container text-on-surface text-center font-semibold text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
-              />
-            </div>
-          </div>
-          <div className="flex flex-col gap-3 mb-4">
-            <label className="text-xs font-semibold text-on-surface-variant block mb-2">{t.bgColorLabel}</label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={bgColor}
-                onChange={(e) => setBgColor(e.target.value)}
-                className="w-10 h-10 rounded cursor-pointer border-0 p-0"
-              />
-              <span className="text-sm font-medium text-on-surface-variant uppercase">{bgColor}</span>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3">
-            {/* Name Toggle */}
-            <label className="flex items-center gap-3 cursor-pointer group w-max">
-              <input
-                type="checkbox"
-                checked={includeName}
-                onChange={(e) => setIncludeName(e.target.checked)}
-                className="w-5 h-5 rounded-md border-2 border-outline-variant/50 accent-primary cursor-pointer"
-              />
-              <span className="text-sm font-medium text-on-surface-variant group-hover:text-on-surface transition-colors">
-                {t.includeName}
-              </span>
-            </label>
-            {includeName && (
-              <div className="animate-fade-in pl-8">
+          {/* Cropping Area */}
+          <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-md">
+            <h3 className="text-sm font-bold text-on-surface mb-1">{t.cropTitle}</h3>
+            <p className="text-xs text-on-surface-variant mb-4">{t.cropDesc}</p>
+            {activePhoto && activePhoto.originalPreview ? (
+              <div className="flex justify-center bg-gray-100 p-4 rounded-lg overflow-hidden">
+                <ReactCrop
+                  crop={activePhoto.crop}
+                  onChange={(c) => updateActivePhoto('crop', c)}
+                  onComplete={(c, pc) => updateActivePhoto('completedCrop', pc)}
+                  aspect={FORMATS[activePhoto.format || 'normal'].ratio}
+                >
+                  <img
+                    ref={imgRef}
+                    src={activePhoto.bgRemovedUrl || activePhoto.originalPreview}
+                    onLoad={onImageLoad}
+                    alt="Crop preview"
+                    className="max-w-full h-auto block"
+                    crossOrigin="anonymous"
+                    style={{
+                      filter: `brightness(${activePhoto.brightness || 100}%) contrast(${activePhoto.contrast || 100}%)`,
+                    }}
+                  />
+                </ReactCrop>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg">
+                No photo selected
+              </div>
+            )}
+          </div>
+
+          {/* Lighting Adjustments */}
+          <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg text-primary" data-icon="tune">tune</span>
+                {t.brightnessLabel} & {t.contrastLabel}
+              </h3>
+              <button
+                onClick={() => {
+                  updateActivePhoto('brightness', 100);
+                  updateActivePhoto('contrast', 100);
+                }}
+                className="text-xs text-primary font-bold hover:text-primary/80 transition-colors px-3 py-1 bg-primary/5 rounded-lg"
+              >
+                {t.resetFilters}
+              </button>
+            </div>
+            <div className="space-y-5">
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-semibold text-on-surface-variant">{t.brightnessLabel}</label>
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">{activePhoto?.brightness}%</span>
+                </div>
                 <input
-                  type="text"
-                  placeholder={t.namePlaceholder}
-                  value={nameText}
-                  onChange={(e) => setNameText(e.target.value)}
-                  maxLength={40}
-                  className="w-full sm:w-64 px-4 py-2 border border-outline-variant/30 rounded-xl bg-surface-container-highest text-on-surface text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  type="range" min="50" max="200" value={activePhoto?.brightness || 100}
+                  onChange={(e) => updateActivePhoto('brightness', Number(e.target.value))}
+                  className="w-full h-2 rounded-full appearance-none cursor-pointer bg-surface-container-highest accent-primary"
                 />
               </div>
-            )}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-semibold text-on-surface-variant">{t.contrastLabel}</label>
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">{activePhoto?.contrast}%</span>
+                </div>
+                <input
+                  type="range" min="50" max="200" value={activePhoto?.contrast || 100}
+                  onChange={(e) => updateActivePhoto('contrast', Number(e.target.value))}
+                  className="w-full h-2 rounded-full appearance-none cursor-pointer bg-surface-container-highest accent-primary"
+                />
+              </div>
+            </div>
+          </div>
 
-            {/* Date Toggle */}
-            <label className="flex items-center gap-3 cursor-pointer group w-max mt-2">
-              <input
-                type="checkbox"
-                checked={includeDate}
-                onChange={(e) => setIncludeDate(e.target.checked)}
-                className="w-5 h-5 rounded-md border-2 border-outline-variant/50 accent-primary cursor-pointer"
-              />
-              <span className="text-sm font-medium text-on-surface-variant group-hover:text-on-surface transition-colors">
-                {t.includeDate}
-              </span>
-            </label>
-            {includeDate && (
-              <div className="animate-fade-in pl-8 flex flex-col gap-3 mt-2">
-                <label className="flex items-center gap-2 cursor-pointer group w-max">
+          {/* Print Configuration */}
+          <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-md">
+            <h3 className="text-sm font-bold text-on-surface mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-lg text-primary" data-icon="print">print</span>
+              {t.printConfig}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-on-surface-variant block mb-2">{t.copies}</label>
+                <div className="flex gap-2 flex-wrap">
+                  {[6, 12, 24, 30].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => updateActivePhoto('numCopies', n)}
+                      className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 border
+                        ${activePhoto?.numCopies === n
+                          ? 'bg-primary text-on-primary border-primary shadow-md'
+                          : 'bg-surface-container text-on-surface-variant border-outline-variant/30 hover:border-primary/40 hover:text-on-surface'}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  <input
+                    type="number" min="1" max="100" value={activePhoto?.numCopies || 6}
+                    onChange={(e) => updateActivePhoto('numCopies', Math.max(1, Math.min(100, Number(e.target.value))))}
+                    className="w-20 px-3 py-2 rounded-xl border border-outline-variant/30 bg-surface-container text-on-surface text-center font-semibold text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 mb-4">
+                <label className="text-xs font-semibold text-on-surface-variant block mb-2">{t.bgColorLabel}</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={bgColor}
+                    onChange={(e) => setBgColor(e.target.value)}
+                    className="w-10 h-10 rounded cursor-pointer border-0 p-0"
+                  />
+                  <span className="text-sm font-medium text-on-surface-variant uppercase">{bgColor}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <label className="flex items-center gap-3 cursor-pointer group w-max">
                   <input
                     type="checkbox"
-                    checked={useCustomDate}
-                    onChange={(e) => setUseCustomDate(e.target.checked)}
-                    className="w-4 h-4 rounded border-2 border-outline-variant/50 accent-primary cursor-pointer"
+                    checked={includeName}
+                    onChange={(e) => setIncludeName(e.target.checked)}
+                    className="w-5 h-5 rounded-md border-2 border-outline-variant/50 accent-primary cursor-pointer"
                   />
-                  <span className="text-xs font-medium text-on-surface-variant group-hover:text-on-surface transition-colors">
-                    {t.customDate}
+                  <span className="text-sm font-medium text-on-surface-variant group-hover:text-on-surface transition-colors">
+                    {t.includeName}
                   </span>
                 </label>
-                {useCustomDate && (
+                {includeName && (
+                  <div className="animate-fade-in pl-8">
+                    <input
+                      type="text"
+                      placeholder={t.namePlaceholder}
+                      value={activePhoto?.nameText || ''}
+                      onChange={(e) => updateActivePhoto('nameText', e.target.value)}
+                      maxLength={40}
+                      className="w-full sm:w-64 px-4 py-2 border border-outline-variant/30 rounded-xl bg-surface-container-highest text-on-surface text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                    />
+                  </div>
+                )}
+
+                <label className="flex items-center gap-3 cursor-pointer group w-max mt-2">
                   <input
-                    type="text"
-                    placeholder={t.customDatePlaceholder}
-                    value={customDateText}
-                    onChange={(e) => setCustomDateText(e.target.value)}
-                    maxLength={15}
-                    className="w-full sm:w-64 px-4 py-2 border border-outline-variant/30 rounded-xl bg-surface-container-highest text-on-surface text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                    type="checkbox"
+                    checked={includeDate}
+                    onChange={(e) => setIncludeDate(e.target.checked)}
+                    className="w-5 h-5 rounded-md border-2 border-outline-variant/50 accent-primary cursor-pointer"
                   />
+                  <span className="text-sm font-medium text-on-surface-variant group-hover:text-on-surface transition-colors">
+                    {t.includeDate}
+                  </span>
+                </label>
+                {includeDate && (
+                  <div className="animate-fade-in pl-8 flex flex-col gap-3 mt-2">
+                    <label className="flex items-center gap-2 cursor-pointer group w-max">
+                      <input
+                        type="checkbox"
+                        checked={useCustomDate}
+                        onChange={(e) => setUseCustomDate(e.target.checked)}
+                        className="w-4 h-4 rounded border-2 border-outline-variant/50 accent-primary cursor-pointer"
+                      />
+                      <span className="text-xs font-medium text-on-surface-variant group-hover:text-on-surface transition-colors">
+                        {t.customDate}
+                      </span>
+                    </label>
+                    {useCustomDate && (
+                      <input
+                        type="text"
+                        placeholder={t.customDatePlaceholder}
+                        value={customDateText}
+                        onChange={(e) => setCustomDateText(e.target.value)}
+                        maxLength={15}
+                        className="w-full sm:w-64 px-4 py-2 border border-outline-variant/30 rounded-xl bg-surface-container-highest text-on-surface text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                      />
+                    )}
+                  </div>
                 )}
               </div>
-            )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
+            <button
+              onClick={handleRemovePhoto}
+              className="px-6 py-3 rounded-xl font-bold text-sm border border-outline-variant/30 text-error hover:text-error hover:bg-error/10 hover:border-error transition-all duration-200 flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-lg" data-icon="delete">delete</span>
+              {language === 'hi' ? 'हटाएं' : 'Remove'}
+            </button>
+            <button
+              onClick={generatePDF}
+              disabled={!photos.some(p => p.completedCrop) || generating}
+              className={`w-full py-3 rounded-lg font-bold text-white transition-colors ${!photos.some(p => p.completedCrop) || generating
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-primary'
+                }`}
+            >
+              {generating ? 'Generating...' : 'Generate Final Sheet'}
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
-        <button
-          onClick={handleReupload}
-          className="px-6 py-3 rounded-xl font-bold text-sm border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:border-primary/40 transition-all duration-200 flex items-center gap-2"
-        >
-          <span className="material-symbols-outlined text-lg" data-icon="restart_alt">restart_alt</span>
-          {t.reupload}
-        </button>
-        <button
-          onClick={generatePDF}
-          disabled={generating || !completedCrop}
-          className="px-10 py-4 bg-primary text-on-primary rounded-xl font-bold text-lg shadow-md hover:shadow-lg hover:-translate-y-0.5 hover:bg-primary/95 transition-all duration-200 flex items-center justify-center gap-3 disabled:opacity-60 disabled:transform-none disabled:shadow-none"
-        >
-          {generating ? (
-            <>
-              <span className="material-symbols-outlined animate-spin" data-icon="progress_activity">progress_activity</span>
-              {t.generating}
-            </>
-          ) : (
-            <>
-              <span className="material-symbols-outlined" data-icon="picture_as_pdf">picture_as_pdf</span>
-              {t.generate}
-            </>
-          )}
-        </button>
-      </div>
+      )}
     </div>
   );
 }

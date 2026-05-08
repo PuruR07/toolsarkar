@@ -1,6 +1,7 @@
 import React from 'react';
 
 export const TEMPLATES = [
+
   // Basic
   { id: 'basic-10th', name: 'Basic - 10th Level', category: 'Basic', desc: 'Traditional tabular format for 10th pass', supportsPhoto: true },
   { id: 'basic-12th', name: 'Basic - 12th Level', category: 'Basic', desc: 'Traditional tabular format for 12th pass' },
@@ -8,6 +9,14 @@ export const TEMPLATES = [
   { id: 'basic-graduation-diploma', name: 'Basic - Graduation (Diploma)', category: 'Basic', desc: 'Traditional tabular format for graduates with diploma' },
   { id: 'basic-graduation', name: 'Basic - Graduation', category: 'Basic', desc: 'Traditional tabular format for graduates' },
   { id: 'basic-masters', name: 'Basic - Masters', category: 'Basic', desc: 'Traditional tabular format for post-graduates', supportsPhoto: true },
+
+  // Basic-2
+  { id: 'basic-2-10th', name: 'Basic-2 10th Level', category: 'Basic-2', desc: 'Two-column layout for 10th pass', supportsPhoto: true },
+  { id: 'basic-2-12th', name: 'Basic-2 12th Level', category: 'Basic-2', desc: 'Two-column layout for 12th pass', supportsPhoto: true },
+  { id: 'basic-2-graduate', name: 'Basic-2 Graduate', category: 'Basic-2', desc: 'Two-column layout for graduates', supportsPhoto: true },
+  { id: 'basic-2-diploma', name: 'Basic-2 Diploma', category: 'Basic-2', desc: 'Two-column layout for diploma holders', supportsPhoto: true },
+  { id: 'basic-2-grad-diploma', name: 'Basic-2 Graduation(Diploma)', category: 'Basic-2', desc: 'Two-column layout for graduates with diploma', supportsPhoto: true },
+  { id: 'basic-2-masters', name: 'Basic-2 Masters', category: 'Basic-2', desc: 'Two-column layout for post-graduates', supportsPhoto: true },
 
   // Minimalist
   { id: 'minimalist', name: 'Minimalist', category: 'Minimalist', desc: 'Lots of whitespace, #000000 text' },
@@ -144,8 +153,136 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
 
 
   // ------------------------------------------------------------------------------------------------
-  // CATEGORY: BASIC (Traditional Indian Fresher Resume)
+  // CATEGORY: BASIC 2
   // ------------------------------------------------------------------------------------------------
+  if (templateId.startsWith('basic-2')) {
+    const leftColHeader = "bg-[#595959] text-white text-center font-serif font-bold uppercase py-1 mt-2 mb-2 tracking-wider";
+    const rightColHeader = "bg-[#8baecf] text-black text-center font-serif font-bold uppercase py-1 mt-3 mb-3 tracking-wider text-lg";
+
+    return (
+      <div className="w-full h-full bg-[#ffffff] text-[#000000] font-serif break-words border-[2px] border-transparent flex">
+
+        {/* Left Column */}
+        <div className="w-[35%] bg-[#8baecf] flex flex-col h-full border-r-[8px] border-gray-300 pb-8">
+          <div className="p-4 flex flex-col items-center">
+            {hasPhoto && TEMPLATES.find(t => t.id === templateId)?.supportsPhoto && (
+              <img src={profileImage} alt="Profile" className="w-[120px] h-[140px] object-cover border-[2px] border-[#000000] mb-2 bg-white" />
+            )}
+          </div>
+
+          <div className="flex flex-col w-full px-2">
+            <h3 className={leftColHeader}>CONTACT</h3>
+            <div className="flex flex-col gap-2 items-center text-sm font-bold text-center px-2">
+              {phone && <div>{phone}</div>}
+              {email && <div>{email}</div>}
+            </div>
+
+            {showStrengths && skillsList.length > 0 && (
+              <>
+                <h3 className={leftColHeader}>SKILLS</h3>
+                <ul className="list-disc list-inside text-sm font-bold px-4">
+                  {skillsList.map((skill, i) => <li key={i}>{skill}</li>)}
+                </ul>
+              </>
+            )}
+
+            {showComputerKnowledge && computerKnowledgeList.length > 0 && (
+              <>
+                <h3 className={leftColHeader}>Computer & Soft. Knowledge</h3>
+                <ul className="list-disc list-inside text-sm font-bold px-4">
+                  {computerKnowledgeList.map((item, i) => <li key={i}>{item}</li>)}
+                </ul>
+              </>
+            )}
+
+            {address && (
+              <>
+                <h3 className={leftColHeader}>Address</h3>
+                <div className="text-sm font-bold text-center px-4">{address}</div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column */}
+        <div className="w-[65%] bg-white p-6 pl-8 flex flex-col">
+          {showHeader && (
+            <div data-measure="header" className="mb-4">
+              <h1 className="text-3xl font-serif font-bold uppercase tracking-wide mb-4">{name}</h1>
+              {showSummary && summary && (
+                <div data-measure="summary" className="mb-4">
+                  <h3 className="font-bold uppercase text-lg mb-1">CAREER OBJECTIVE:</h3>
+                  <p className="text-sm font-bold leading-relaxed text-justify">{summary}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex-1">
+            {eduToRender.length > 0 && (
+              <div className="mb-4">
+                {isFirst && <h3 className={rightColHeader}>EDUCATION</h3>}
+                <ul className="list-disc list-inside text-sm font-bold flex flex-col gap-1 ml-2">
+                  {eduToRender.map(edu => (
+                    <li key={edu.id} data-measure="education-item" data-id={edu.id}>
+                      {edu.degree} Passed From {edu.institution} ({edu.board}). {edu.score ? `Score: ${edu.score}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {expToRender.length > 0 && (
+              <div className="mb-4">
+                {isFirst && <h3 className={rightColHeader}>EXPERIENCE</h3>}
+                <ul className="list-disc list-inside text-sm flex flex-col gap-2 ml-2">
+                  {expToRender.map(exp => (
+                    <li key={exp.id} data-measure="experience-item" data-id={exp.id}>
+                      Worked with <span className="font-bold underline">{exp.company}</span> as a {exp.title} From {exp.dates}.
+                      {exp.description && <div className="ml-5 mt-1 font-normal text-justify">{exp.description}</div>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {showProfile && (
+              <div data-measure="profile" className="mb-4">
+                <h3 className={rightColHeader}>PERSONAL DETAILS</h3>
+                <div className="text-[15px] font-bold flex flex-col gap-1 px-4">
+                  {name && (
+                    <div className="grid grid-cols-[140px_20px_1fr]">
+                      <span>Name</span><span>-</span><span>{name}</span>
+                    </div>
+                  )}
+                  {customFields.filter(cf => cf.value).map((cf, i) => (
+                    <div key={i} className="grid grid-cols-[140px_20px_1fr]">
+                      <span>{cf.label}</span><span>-</span><span>{cf.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {showFooter && (
+              <div data-measure="footer" className="mt-4">
+                <h3 className="font-bold uppercase text-[15px] mb-2">DECLARATION</h3>
+                <p className="text-sm mb-6 text-justify">
+                  I hereby declare that the above mentioned information is true to my knowledge and belief and I bear the responsibility for the correctness of the above mentioned particulars.
+                </p>
+                <div className="flex justify-between items-end text-sm font-bold mt-8">
+                  <div>Date:-</div>
+                  <div className="italic text-lg">Signature</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+    );
+  }
+
   if (templateId.startsWith('basic')) {
     return (
       <div className="w-full h-full bg-[#ffffff] text-[#000000] p-[40px] font-sans break-words border-[2px] border-transparent">
@@ -396,7 +533,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
               </div>
             </div>
           )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="bg-[#ffffff] p-[24px] rounded-lg shadow-sm border border-[#e2e8f0] mt-[16px]" titleCss="text-[14px] font-[700] uppercase text-[#475569] mb-[12px] border-b border-[#e2e8f0] pb-[6px]" textCss="text-[14px] font-[500] text-[#475569] leading-[1.6]" />}
+          {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="bg-[#ffffff] p-[24px] rounded-lg shadow-sm border border-[#e2e8f0] mt-[16px]" titleCss="text-[14px] font-[700] uppercase text-[#475569] mb-[12px] border-b border-[#e2e8f0] pb-[6px]" textCss="text-[14px] font-[500] text-[#475569] leading-[1.6]" />}
         </div>
       </div>
     );
@@ -495,7 +632,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="bg-[#ffffff] p-[20px] border border-[#e5e7eb] rounded-sm shadow-sm mt-[16px]" titleCss="text-[16px] font-[800] text-[#1f2937] uppercase tracking-[1px] mb-[12px]" textCss="text-[14px] font-[500] text-[#1f2937] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="bg-[#ffffff] p-[20px] border border-[#e5e7eb] rounded-sm shadow-sm mt-[16px]" titleCss="text-[16px] font-[800] text-[#1f2937] uppercase tracking-[1px] mb-[12px]" textCss="text-[14px] font-[500] text-[#1f2937] leading-[1.6]" />}
           </div>
         </div>
       </div>
@@ -627,7 +764,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="" textCss="text-[14px] font-[500] text-[#374151] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="" textCss="text-[14px] font-[500] text-[#374151] leading-[1.6]" />}
           </div>
         </div>
       </div>
@@ -671,7 +808,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
               </div>
             </div>
           )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[15px] font-[800] text-[#111827] uppercase tracking-[1px] mb-[16px]" textCss="text-[14px] font-[500] text-[#111827] leading-[1.6]" />}
+          {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[15px] font-[800] text-[#111827] uppercase tracking-[1px] mb-[16px]" textCss="text-[14px] font-[500] text-[#111827] leading-[1.6]" />}
         </div>
         <div className="w-[65%] p-[40px] flex flex-col gap-[30px]">
           {showSummary && summary && (
@@ -758,7 +895,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[16px] font-[900] text-[#10b981] uppercase tracking-[2px] mb-[16px] flex items-center gap-[10px]" textCss="text-[14px] font-[500] text-[#10b981] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[16px] font-[900] text-[#10b981] uppercase tracking-[2px] mb-[16px] flex items-center gap-[10px]" textCss="text-[14px] font-[500] text-[#10b981] leading-[1.6]" />}
           </div>
         </div>
       </div>
@@ -786,7 +923,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
               </div>
             </div>
           )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[14px] font-[700] uppercase tracking-[1px] border-b border-[#334155] pb-[6px] mb-[12px]" textCss="text-[14px] font-[500] text-[#374151] leading-[1.6]" />}
+          {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[14px] font-[700] uppercase tracking-[1px] border-b border-[#334155] pb-[6px] mb-[12px]" textCss="text-[14px] font-[500] text-[#374151] leading-[1.6]" />}
         </div>
         <div className="w-[70%] p-[40px]">
           {showSummary && summary && (
@@ -852,7 +989,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
               </div>
             </div>
           )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="w-full text-left mt-[16px]" titleCss="text-[14px] font-[800] uppercase tracking-[1px] text-[#3b82f6] mb-[16px]" textCss="text-[14px] font-[500] text-[#3b82f6] leading-[1.6]" />}
+          {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="w-full text-left mt-[16px]" titleCss="text-[14px] font-[800] uppercase tracking-[1px] text-[#3b82f6] mb-[16px]" textCss="text-[14px] font-[500] text-[#3b82f6] leading-[1.6]" />}
         </div>
         <div className="w-[65%] p-[50px] flex flex-col gap-[30px]">
           {showSummary && summary && (
@@ -950,7 +1087,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="bg-[#0f172a] text-[#ffffff] rounded-[24px] p-[24px] shadow-sm border border-[#1e293b] mt-[16px]" titleCss="text-[16px] font-[800] text-[#ffffff] mb-[16px]" textCss="text-[14px] font-[500] text-[#ffffff] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="bg-[#0f172a] text-[#ffffff] rounded-[24px] p-[24px] shadow-sm border border-[#1e293b] mt-[16px]" titleCss="text-[16px] font-[800] text-[#ffffff] mb-[16px]" textCss="text-[14px] font-[500] text-[#ffffff] leading-[1.6]" />}
             {eduToRender.length > 0 && (
               <div className="bg-[#ffffff] rounded-[24px] p-[24px] shadow-sm border border-[#e2e8f0]">
                 {isFirst && <h2 className="text-[16px] font-[800] text-[#0f172a] mb-[20px]">Education</h2>}
@@ -1033,7 +1170,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[16px] font-[800] text-[#111827] uppercase tracking-[1px] border-b border-[#e5e7eb] pb-[8px] mb-[16px]" textCss="text-[14px] font-[500] text-[#111827] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[16px] font-[800] text-[#111827] uppercase tracking-[1px] border-b border-[#e5e7eb] pb-[8px] mb-[16px]" textCss="text-[14px] font-[500] text-[#111827] leading-[1.6]" />}
           </div>
         </div>
       </div>
@@ -1103,7 +1240,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[18px] font-[800] uppercase text-[#f97316] mb-[20px]" textCss="text-[14px] font-[500] text-[#f97316] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[18px] font-[800] uppercase text-[#f97316] mb-[20px]" textCss="text-[14px] font-[500] text-[#f97316] leading-[1.6]" />}
           </div>
         </div>
       </div>
@@ -1167,7 +1304,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="bg-[#ffffff] p-[24px] rounded-xl shadow-md border-[4px] border-[#111827] flex-1 mt-[16px]" titleCss="text-[16px] font-[900] text-[#111827] uppercase bg-[#cbd5e1] inline-block px-[10px] py-[2px] mb-[20px] transform rotate-2" textCss="text-[14px] font-[500] text-[#111827] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="bg-[#ffffff] p-[24px] rounded-xl shadow-md border-[4px] border-[#111827] flex-1 mt-[16px]" titleCss="text-[16px] font-[900] text-[#111827] uppercase bg-[#cbd5e1] inline-block px-[10px] py-[2px] mb-[20px] transform rotate-2" textCss="text-[14px] font-[500] text-[#111827] leading-[1.6]" />}
           </div>
         </div>
       </div>
@@ -1245,7 +1382,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[20px] font-[900] bg-[#1a202c] text-[#ffffff] px-[16px] py-[8px] inline-block mb-[24px] transform -rotate-1 shadow-lg" textCss="text-[14px] font-[500] text-[#ffffff] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[20px] font-[900] bg-[#1a202c] text-[#ffffff] px-[16px] py-[8px] inline-block mb-[24px] transform -rotate-1 shadow-lg" textCss="text-[14px] font-[500] text-[#ffffff] leading-[1.6]" />}
           </div>
         </div>
       </div>
@@ -1316,7 +1453,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                   </div>
                 </div>
               )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[16px] font-[800] uppercase tracking-[2px] text-[#0f172a] border-b-[2px] border-[#3b82f6] pb-[8px] mb-[24px]" textCss="text-[14px] font-[500] text-[#0f172a] leading-[1.6]" />}
+              {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[16px] font-[800] uppercase tracking-[2px] text-[#0f172a] border-b-[2px] border-[#3b82f6] pb-[8px] mb-[24px]" textCss="text-[14px] font-[500] text-[#0f172a] leading-[1.6]" />}
             </div>
           </div>
         </div>
@@ -1405,7 +1542,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
         <div className="flex gap-[40px]">
           {eduToRender.length > 0 && <BlockEdu containerCss="flex-1" titleCss="text-[20px] font-[900] uppercase tracking-[1px] border-b-[4px] border-[#000000] pb-[8px] mb-[20px] bg-[#000000] text-[#ffffff] px-[16px] py-[4px] inline-block" itemCss="mb-[16px] border-[2px] border-[#000000] p-[16px]" headerTitleCss="text-[16px] font-[900]" dateCompanyCss={{ date: "text-[13px] font-[800]", company: "text-[14px] font-[800] mt-[4px]" }} />}
           {showSkills && skillsList.length > 0 && <BlockSkills containerCss="flex-1" titleCss="text-[20px] font-[900] uppercase tracking-[1px] border-b-[4px] border-[#000000] pb-[8px] mb-[20px] bg-[#000000] text-[#ffffff] px-[16px] py-[4px] inline-block" mapCss="flex flex-col gap-[8px]" pillCss="text-[14px] font-[800] border-[2px] border-[#000000] px-[12px] py-[6px] uppercase" />}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="flex-1 mt-[20px]" titleCss="text-[20px] font-[900] uppercase tracking-[1px] border-b-[4px] border-[#000000] pb-[8px] mb-[12px] bg-[#000000] text-[#ffffff] px-[16px] py-[4px] inline-block" textCss="text-[14px] font-[800] leading-[1.6]" />}
+          {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="flex-1 mt-[20px]" titleCss="text-[20px] font-[900] uppercase tracking-[1px] border-b-[4px] border-[#000000] pb-[8px] mb-[12px] bg-[#000000] text-[#ffffff] px-[16px] py-[4px] inline-block" textCss="text-[14px] font-[800] leading-[1.6]" />}
         </div>
       </div>
     );
@@ -1425,7 +1562,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
                 </div>
               </div>
             )}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[14px] font-[700] uppercase tracking-[3px] text-[#171717] text-center border-b-[2px] border-[#171717] pb-[8px] mb-[24px]" textCss="text-[14px] font-[500] text-[#171717] leading-[1.6]" />}
+            {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss=" mt-[16px]" titleCss="text-[14px] font-[700] uppercase tracking-[3px] text-[#171717] text-center border-b-[2px] border-[#171717] pb-[8px] mb-[24px]" textCss="text-[14px] font-[500] text-[#171717] leading-[1.6]" />}
           </div>
           {isFirst && hasPhoto && (
             <div className="w-[120px] h-[120px] rounded-full overflow-hidden border-[4px] border-[#e5e7eb] shadow-md flex-shrink-0">
@@ -1496,7 +1633,7 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
       {expToRender.length > 0 && <BlockExp containerCss="mb-[30px]" titleCss="text-[18px] font-[900] text-[#1e293b] uppercase tracking-[1px] mb-[16px]" itemCss="mb-[20px] pl-[12px] border-l-[3px] border-[#3b82f6]" headerTitleCss="text-[18px] font-[800] text-[#111827]" dateCompanyCss={{ date: "", company: "text-[14px] font-[600] text-[#3b82f6] mb-[8px]" }} descCss="text-[14px] leading-[1.6] text-[#4b5563]" />}
       {eduToRender.length > 0 && <BlockEdu containerCss="mb-[30px]" titleCss="text-[18px] font-[900] text-[#1e293b] uppercase tracking-[1px] mb-[16px]" itemCss="mb-[16px] bg-[#f8fafc] p-[16px] rounded-sm" headerTitleCss="text-[16px] font-[800] text-[#111827]" dateCompanyCss={{ date: "text-[13px] text-[#94a3b8]", company: "text-[14px] font-[600] text-[#475569]" }} />}
       {showSkills && skillsList.length > 0 && <BlockSkills containerCss="" titleCss="text-[18px] font-[900] text-[#1e293b] uppercase tracking-[1px] mb-[16px]" mapCss="flex flex-wrap gap-[8px]" pillCss="bg-[#e2e8f0] text-[#0f172a] text-[13px] font-[700] px-[12px] py-[4px] rounded-md" />}
-        {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="mt-[20px]" titleCss="text-[18px] font-[900] text-[#1e293b] uppercase tracking-[1px] mb-[8px]" textCss="text-[14px] font-[600] text-[#475569] leading-[1.6]" />}
+      {showProfile && customFields.filter(cf => cf.value).length > 0 && <BlockProfile containerCss="mt-[20px]" titleCss="text-[18px] font-[900] text-[#1e293b] uppercase tracking-[1px] mb-[8px]" textCss="text-[14px] font-[600] text-[#475569] leading-[1.6]" />}
     </div>
   );
 };
@@ -1506,6 +1643,29 @@ export const TemplateRenderer = ({ templateId, personalDetails, summary, experie
 // MINIATURE TEMPLATE PREVIEWS (CSS only representation)
 // ------------------------------------------------------------------------------------------------
 export const MiniatureTemplate = ({ previewId }) => {
+  if (previewId.startsWith('basic-2')) return (
+    <div className="w-full h-full flex">
+      <div className="w-[35%] h-full bg-[#8baecf] flex flex-col items-center p-1 border-r-[2px] border-gray-300">
+        <div className="w-3/4 aspect-[3/4] bg-white border border-black mb-1"></div>
+        <div className="w-full h-1 bg-gray-600 mb-1"></div>
+        <div className="w-2/3 h-0.5 bg-gray-800 mb-0.5"></div>
+        <div className="w-2/3 h-0.5 bg-gray-800 mb-2"></div>
+        <div className="w-full h-1 bg-gray-600 mb-1"></div>
+        <div className="w-3/4 h-0.5 bg-gray-800 mb-0.5"></div>
+      </div>
+      <div className="w-[65%] h-full bg-white p-2 flex flex-col">
+        <div className="w-3/4 h-2 bg-black mb-2"></div>
+        <div className="w-1/2 h-1 bg-black mb-1"></div>
+        <div className="w-full h-0.5 bg-gray-400 mb-2"></div>
+        <div className="w-full h-1.5 bg-[#8baecf] mb-1"></div>
+        <div className="w-5/6 h-0.5 bg-black mb-0.5"></div>
+        <div className="w-4/6 h-0.5 bg-black mb-2"></div>
+        <div className="w-full h-1.5 bg-[#8baecf] mb-1"></div>
+        <div className="w-full h-0.5 bg-black mb-0.5"></div>
+      </div>
+    </div>
+  );
+
   if (previewId.startsWith('basic')) return (
     <div className="w-full h-full p-2 flex flex-col bg-white border border-gray-400">
       <div className="w-1/3 h-1.5 bg-gray-800 mx-auto mb-2"></div>

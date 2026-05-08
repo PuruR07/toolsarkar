@@ -412,7 +412,7 @@ export default function ResumeMaker({ language }) {
         </p>
 
         <div className="flex flex-wrap justify-center gap-3 mb-12">
-          {["All", "Basic", "Minimalist", "Professional", "Modern", "Creative", "Executive", "With Photo"].map(cat => (
+          {["All", "Basic", "Basic-2", "Minimalist", "Professional", "Modern", "Creative", "Executive", "With Photo"].map(cat => (
             <button
               key={cat}
               onClick={() => setActiveFilter(cat)}
